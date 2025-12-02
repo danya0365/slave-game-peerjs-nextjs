@@ -4,6 +4,7 @@ import type {
   PeerPlayer,
   RoomState,
 } from "@/src/domain/types/peer";
+import { PEER_SERVER_CONFIG } from "@/src/infrastructure/config/peer.config";
 import Peer, { DataConnection } from "peerjs";
 import { create } from "zustand";
 
@@ -98,6 +99,7 @@ export const usePeerStore = create<PeerStore>((set, get) => ({
       const clientPeerId = generateClientPeerId();
 
       const peer = new Peer(clientPeerId, {
+        ...PEER_SERVER_CONFIG,
         debug: 2,
       });
 
@@ -193,6 +195,7 @@ export const usePeerStore = create<PeerStore>((set, get) => ({
     const hostPeerId = getHostPeerId(roomCode);
 
     const newPeer = new Peer(hostPeerId, {
+      ...PEER_SERVER_CONFIG,
       debug: 2,
     });
 
@@ -260,6 +263,7 @@ export const usePeerStore = create<PeerStore>((set, get) => ({
       const hostPeerId = getHostPeerId(roomCode);
 
       const newPeer = new Peer(clientPeerId, {
+        ...PEER_SERVER_CONFIG,
         debug: 2,
       });
 
