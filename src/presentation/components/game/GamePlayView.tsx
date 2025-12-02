@@ -595,6 +595,7 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
                 avatar={topPlayer.avatar}
                 isCurrentTurn={topPlayer.isCurrentTurn}
                 hasPassed={topPlayer.hasPassed}
+                finishOrder={topPlayer.finishOrder}
                 position="top"
               />
             </div>
@@ -609,6 +610,7 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
                 avatar={leftPlayer.avatar}
                 isCurrentTurn={leftPlayer.isCurrentTurn}
                 hasPassed={leftPlayer.hasPassed}
+                finishOrder={leftPlayer.finishOrder}
                 position="left"
               />
             </div>
@@ -623,6 +625,7 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
                 avatar={rightPlayer.avatar}
                 isCurrentTurn={rightPlayer.isCurrentTurn}
                 hasPassed={rightPlayer.hasPassed}
+                finishOrder={rightPlayer.finishOrder}
                 position="right"
               />
             </div>

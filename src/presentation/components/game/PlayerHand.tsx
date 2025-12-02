@@ -88,7 +88,28 @@ interface OpponentHandProps {
   avatar: string;
   isCurrentTurn: boolean;
   hasPassed: boolean;
+  finishOrder: number | null; // 1 = King, 2 = Noble, 3 = Commoner, 4 = Slave
   position: "top" | "left" | "right";
+}
+
+// Get rank display based on finish order
+function getRankDisplay(finishOrder: number): {
+  name: string;
+  emoji: string;
+  color: string;
+} {
+  switch (finishOrder) {
+    case 1:
+      return { name: "King", emoji: "👑", color: "text-yellow-400" };
+    case 2:
+      return { name: "Noble", emoji: "🎖️", color: "text-purple-400" };
+    case 3:
+      return { name: "Commoner", emoji: "👤", color: "text-blue-400" };
+    case 4:
+      return { name: "Slave", emoji: "⛓️", color: "text-gray-400" };
+    default:
+      return { name: "ออกแล้ว", emoji: "✓", color: "text-green-400" };
+  }
 }
 
 export function OpponentHand({
@@ -97,6 +118,7 @@ export function OpponentHand({
   avatar,
   isCurrentTurn,
   hasPassed,
+  finishOrder,
   position,
 }: OpponentHandProps) {
   // Layout based on position
@@ -129,11 +151,19 @@ export function OpponentHand({
         <div className="text-white text-sm font-medium text-center truncate max-w-20">
           {playerName}
         </div>
-        {hasPassed && (
+        {hasPassed && cardCount > 0 && (
           <div className="text-red-400 text-xs font-medium">ผ่าน</div>
         )}
-        {cardCount === 0 && (
-          <div className="text-green-400 text-xs font-medium">ออกแล้ว!</div>
+        {cardCount === 0 && finishOrder && (
+          <div
+            className={cn(
+              "text-xs font-bold flex items-center gap-1",
+              getRankDisplay(finishOrder).color
+            )}
+          >
+            <span>{getRankDisplay(finishOrder).emoji}</span>
+            <span>{getRankDisplay(finishOrder).name}</span>
+          </div>
         )}
       </div>
 
