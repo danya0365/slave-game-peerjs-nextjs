@@ -14,7 +14,7 @@ import {
   sortCards,
 } from "@/src/domain/utils/cardUtils";
 import { cn } from "@/src/lib/utils";
-import { useGameStore } from "@/src/presentation/stores/gameStore";
+import { RANK_SCORES, useGameStore } from "@/src/presentation/stores/gameStore";
 import { usePeerStore } from "@/src/presentation/stores/peerStore";
 import { useUserStore } from "@/src/presentation/stores/userStore";
 import {
@@ -673,46 +673,127 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
 
   // Game end
   if (phase === "game_end") {
-    return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="max-w-md w-full bg-gray-800 rounded-2xl p-8 text-center">
-          <Trophy className="w-16 h-16 text-yellow-500 mx-auto mb-4" />
-          <h1 className="text-2xl font-bold text-white mb-6">เกมจบแล้ว!</h1>
+    // Sort players by accumulated score (descending)
+    const sortedPlayers = [...gamePlayers]
+      .filter((p) => p.rank)
+      .sort((a, b) => b.score - a.score);
 
-          <div className="space-y-3 mb-8">
-            {gamePlayers
-              .filter((p) => p.rank)
-              .sort((a, b) => (a.finishOrder ?? 5) - (b.finishOrder ?? 5))
-              .map((player) => (
+    return (
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
+        <div className="max-w-lg w-full bg-gray-800 rounded-2xl p-6 sm:p-8">
+          {/* Header */}
+          <div className="text-center mb-6">
+            <Trophy className="w-16 h-16 text-yellow-500 mx-auto mb-3" />
+            <h1 className="text-2xl font-bold text-white">
+              รอบที่ {roundNumber} จบแล้ว!
+            </h1>
+          </div>
+
+          {/* Scoreboard */}
+          <div className="bg-gray-900/50 rounded-xl p-4 mb-6">
+            <div className="flex items-center justify-between text-sm text-gray-400 mb-3 px-2">
+              <span>ผู้เล่น</span>
+              <div className="flex gap-6">
+                <span>รอบนี้</span>
+                <span>รวม</span>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              {sortedPlayers.map((player, index) => (
                 <div
                   key={player.id}
                   className={cn(
-                    "flex items-center gap-4 p-4 rounded-xl",
+                    "flex items-center gap-3 p-3 rounded-xl transition-all",
                     player.rank === "king" &&
                       "bg-yellow-500/20 ring-2 ring-yellow-500",
-                    player.rank === "slave" && "bg-gray-700"
+                    player.rank === "noble" && "bg-purple-500/20",
+                    player.rank === "commoner" && "bg-blue-500/20",
+                    player.rank === "slave" && "bg-gray-700/50"
                   )}
                 >
-                  <div className="text-3xl">{player.avatar}</div>
-                  <div className="flex-1 text-left">
-                    <div className="font-medium text-white">{player.name}</div>
-                    <div className="text-sm text-gray-400">
+                  {/* Rank position */}
+                  <div className="w-6 text-center font-bold text-gray-500">
+                    #{index + 1}
+                  </div>
+
+                  {/* Avatar & Rank emoji */}
+                  <div className="relative">
+                    <div className="text-3xl">{player.avatar}</div>
+                    <div className="absolute -top-1 -right-1 text-lg">
+                      {player.rank && PLAYER_RANK_DISPLAY[player.rank].emoji}
+                    </div>
+                  </div>
+
+                  {/* Name & Rank */}
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-white truncate">
+                      {player.name}
+                    </div>
+                    <div
+                      className={cn(
+                        "text-xs font-medium",
+                        player.rank === "king" && "text-yellow-400",
+                        player.rank === "noble" && "text-purple-400",
+                        player.rank === "commoner" && "text-blue-400",
+                        player.rank === "slave" && "text-gray-400"
+                      )}
+                    >
                       {player.rank && PLAYER_RANK_DISPLAY[player.rank].name}
                     </div>
                   </div>
-                  <div className="text-2xl">
-                    {player.rank && PLAYER_RANK_DISPLAY[player.rank].emoji}
+
+                  {/* Scores */}
+                  <div className="flex gap-6 items-center">
+                    <div
+                      className={cn(
+                        "w-8 text-center font-bold",
+                        player.roundScore > 0
+                          ? "text-green-400"
+                          : "text-gray-500"
+                      )}
+                    >
+                      +{player.roundScore}
+                    </div>
+                    <div className="w-10 text-center font-bold text-white text-lg">
+                      {player.score}
+                    </div>
                   </div>
                 </div>
               ))}
+            </div>
           </div>
 
-          <Link
-            href="/lobby"
-            className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-red-500 hover:bg-red-600 text-white font-medium"
-          >
-            กลับห้องรอ
-          </Link>
+          {/* Score legend */}
+          <div className="flex justify-center gap-4 text-xs text-gray-500 mb-6">
+            <span>👑 +{RANK_SCORES.king}</span>
+            <span>🎖️ +{RANK_SCORES.noble}</span>
+            <span>👤 +{RANK_SCORES.commoner}</span>
+            <span>⛓️ +{RANK_SCORES.slave}</span>
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-3">
+            <Link
+              href="/lobby"
+              className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gray-700 hover:bg-gray-600 text-white font-medium transition-colors"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              ออกจากเกม
+            </Link>
+            {isHost && (
+              <button
+                onClick={() => {
+                  // TODO: Implement play again - deal new cards
+                  useGameStore.getState().resetRound();
+                }}
+                className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-green-500 hover:bg-green-600 text-white font-medium transition-colors"
+              >
+                <Trophy className="w-4 h-4" />
+                เล่นอีกรอบ
+              </button>
+            )}
+          </div>
         </div>
       </div>
     );

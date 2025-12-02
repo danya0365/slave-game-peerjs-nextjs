@@ -27,7 +27,17 @@ export interface GamePlayer {
   hasPassed: boolean;
   finishOrder: number | null; // 1 = first out, 2 = second, etc.
   rank: PlayerRank | null;
+  score: number; // Accumulated score across rounds
+  roundScore: number; // Score earned this round
 }
+
+// Score constants
+export const RANK_SCORES: Record<PlayerRank, number> = {
+  king: 3,
+  noble: 2,
+  commoner: 1,
+  slave: 0,
+};
 
 // Game state
 interface GameState {
@@ -120,6 +130,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       hasPassed: false,
       finishOrder: null,
       rank: null,
+      score: 0,
+      roundScore: 0,
     }));
 
     set({
@@ -493,14 +505,19 @@ export const useGameStore = create<GameStore>((set, get) => ({
         ? [...finishOrder, slavePlayer.id]
         : finishOrder;
 
-      // Assign ranks
+      // Assign ranks and calculate scores
       const ranks: PlayerRank[] = ["king", "noble", "commoner", "slave"];
       const updatedPlayers = players.map((player) => {
         const orderIndex = finalOrder.indexOf(player.id);
+        const rank = orderIndex >= 0 ? ranks[orderIndex] : null;
+        const roundScore = rank ? RANK_SCORES[rank] : 0;
+
         return {
           ...player,
-          rank: orderIndex >= 0 ? ranks[orderIndex] : null,
+          rank,
           finishOrder: orderIndex >= 0 ? orderIndex + 1 : null,
+          roundScore,
+          score: player.score + roundScore, // Add to accumulated score
         };
       });
 
@@ -517,11 +534,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set(initialState);
   },
 
-  // Reset for new round (keep players)
+  // Reset for new round (keep players and accumulated scores)
   resetRound: () => {
     const { players } = get();
 
-    // Keep player info but reset game state
+    // Keep player info and accumulated scores but reset round state
     const resetPlayers = players.map((player) => ({
       ...player,
       hand: [],
@@ -529,12 +546,21 @@ export const useGameStore = create<GameStore>((set, get) => ({
       hasPassed: false,
       finishOrder: null,
       rank: null,
+      roundScore: 0, // Reset round score
+      // score is preserved!
     }));
 
     set({
-      ...initialState,
-      players: resetPlayers,
       phase: "waiting",
+      currentPlayerIndex: 0,
+      currentHand: null,
+      lastPlayerId: null,
+      passCount: 0,
+      discardPile: [],
+      isFirstTurn: true,
+      finishOrder: [],
+      players: resetPlayers,
+      // roundNumber is preserved for next round
     });
   },
 }));
