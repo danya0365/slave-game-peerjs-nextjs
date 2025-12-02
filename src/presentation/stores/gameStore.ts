@@ -63,6 +63,14 @@ interface GameActions {
   playCards: (playerId: string, cards: Card[]) => boolean;
   pass: (playerId: string) => boolean;
 
+  // Remote sync (for receiving plays from other players - no validation)
+  applyRemotePlay: (
+    playerId: string,
+    cards: Card[],
+    playedHand: PlayedHand
+  ) => void;
+  applyRemotePass: (playerId: string) => void;
+
   // Validation
   canPlayCards: (playerId: string, cards: Card[]) => boolean;
   canPass: (playerId: string) => boolean;
@@ -255,6 +263,84 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
 
     return true;
+  },
+
+  // Apply remote play (no validation - for syncing from other players)
+  applyRemotePlay: (playerId, cards, playedHand) => {
+    const state = get();
+    const { players } = state;
+
+    const playerIndex = players.findIndex((p) => p.id === playerId);
+    if (playerIndex === -1) return;
+
+    // Reduce card count for the player (remove cards.length dummy cards)
+    const player = players[playerIndex];
+    const newHandLength = Math.max(0, player.hand.length - cards.length);
+    const remainingCards = player.hand.slice(0, newHandLength);
+
+    // Check if player finished
+    const finishedPlayers = state.finishOrder.length;
+    const playerFinished = remainingCards.length === 0;
+
+    // Update all players
+    const updatedPlayers = players.map((p, index) => ({
+      ...p,
+      hand: index === playerIndex ? remainingCards : p.hand,
+      isCurrentTurn: false, // Will be set by nextTurn
+      hasPassed: false,
+      finishOrder:
+        index === playerIndex && playerFinished
+          ? finishedPlayers + 1
+          : p.finishOrder,
+    }));
+
+    set({
+      players: updatedPlayers,
+      currentHand: playedHand,
+      lastPlayerId: playerId,
+      passCount: 0,
+      isFirstTurn: false,
+      finishOrder: playerFinished
+        ? [...state.finishOrder, playerId]
+        : state.finishOrder,
+    });
+
+    // Check for game end or move to next turn
+    if (playerFinished) {
+      get().checkGameEnd();
+    }
+
+    if (get().phase === "playing") {
+      get().nextTurn();
+    }
+  },
+
+  // Apply remote pass (no validation - for syncing from other players)
+  applyRemotePass: (playerId) => {
+    const state = get();
+    const { players } = state;
+
+    const playerIndex = players.findIndex((p) => p.id === playerId);
+    if (playerIndex === -1) return;
+
+    // Update player
+    const updatedPlayers = players.map((p, index) => ({
+      ...p,
+      isCurrentTurn: false, // Will be set by nextTurn
+      hasPassed: index === playerIndex ? true : p.hasPassed,
+    }));
+
+    set({
+      players: updatedPlayers,
+      passCount: state.passCount + 1,
+    });
+
+    // Check if round should end
+    get().checkRoundEnd();
+
+    if (get().phase === "playing") {
+      get().nextTurn();
+    }
   },
 
   // Check if player can play these cards

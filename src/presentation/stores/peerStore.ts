@@ -504,18 +504,33 @@ export const usePeerStore = create<PeerStore>((set, get) => ({
         break;
       }
 
-      // Game messages - forward to game handler
+      // Game messages - forward to game handler and relay if host
       case "deal_cards":
       case "play_cards":
       case "pass_turn":
       case "round_end":
       case "game_end":
       case "game_start": {
-        const { onGameMessage } = get();
+        const { onGameMessage, room, connections } = get();
+
+        // Forward to local game handler
         if (onGameMessage) {
           onGameMessage(message);
         } else {
           console.log("[PeerJS] No game message handler for:", message.type);
+        }
+
+        // If host, relay to all OTHER clients (not back to sender)
+        if (
+          room?.isHost &&
+          (message.type === "play_cards" || message.type === "pass_turn")
+        ) {
+          connections.forEach((conn, connPeerId) => {
+            // Don't send back to the sender
+            if (connPeerId !== fromPeerId && conn.open) {
+              conn.send(message);
+            }
+          });
         }
         break;
       }

@@ -70,15 +70,14 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
     phase,
     players: gamePlayers,
     currentHand,
-    currentPlayerIndex,
     isFirstTurn,
-    finishOrder,
     initializeGame,
     playCards: gamePlayCards,
     pass: gamePass,
+    applyRemotePlay,
+    applyRemotePass,
     canPlayCards,
     canPass,
-    isPlayerTurn,
   } = useGameStore();
 
   // Local state
@@ -251,18 +250,18 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
         }
 
         case "play_cards": {
-          // Handle other player's card play
+          // Handle other player's card play (use remote apply - no validation)
           const playMsg = message as PlayCardsMessage;
-          gamePlayCards(playMsg.playerId, playMsg.cards);
+          applyRemotePlay(playMsg.playerId, playMsg.cards, playMsg.playedHand);
           // Add to history
           addGameAction(playMsg.playerId, "play", playMsg.cards);
           break;
         }
 
         case "pass_turn": {
-          // Handle other player's pass
+          // Handle other player's pass (use remote apply - no validation)
           const passMsg = message as PassTurnMessage;
-          gamePass(passMsg.playerId);
+          applyRemotePass(passMsg.playerId);
           // Add to history
           addGameAction(passMsg.playerId, "pass");
           break;
@@ -282,8 +281,8 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
     players,
     phase,
     initializeGame,
-    gamePlayCards,
-    gamePass,
+    applyRemotePlay,
+    applyRemotePass,
     setOnGameMessage,
     addGameAction,
   ]);
@@ -388,7 +387,7 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
       // Add to game history
       addGameAction(myPlayerId, "play", selectedCards);
 
-      // Broadcast to other players
+      // Send to other players
       const message = {
         type: "play_cards" as const,
         senderId: peerId!,
@@ -399,7 +398,14 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
       };
 
       if (isHost) {
+        // Host broadcasts to all clients
         broadcastToAll(message);
+      } else {
+        // Client sends to host (host will relay to others)
+        const hostConnection = usePeerStore.getState().hostConnection;
+        if (hostConnection?.open) {
+          hostConnection.send(message);
+        }
       }
 
       setSelectedCards([]);
@@ -425,7 +431,14 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
       };
 
       if (isHost) {
+        // Host broadcasts to all clients
         broadcastToAll(message);
+      } else {
+        // Client sends to host (host will relay to others)
+        const hostConnection = usePeerStore.getState().hostConnection;
+        if (hostConnection?.open) {
+          hostConnection.send(message);
+        }
       }
     }
   };
