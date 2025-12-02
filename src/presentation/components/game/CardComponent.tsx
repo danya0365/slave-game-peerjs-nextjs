@@ -66,7 +66,7 @@ export function CardComponent({
         // Playable state
         isPlayable
           ? "hover:-translate-y-1 hover:shadow-lg cursor-pointer border-gray-300"
-          : "opacity-60 cursor-not-allowed border-gray-200",
+          : "cursor-not-allowed border-gray-200",
         // Click effect
         isPlayable && "active:scale-95"
       )}
