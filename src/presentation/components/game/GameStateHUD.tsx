@@ -4,13 +4,24 @@ import { cn } from "@/src/lib/utils";
 import { ChevronDown, ChevronUp, History, User } from "lucide-react";
 import { useState } from "react";
 
-interface GameAction {
+export type GameActionType =
+  | "play"
+  | "pass"
+  | "start"
+  | "win_round"
+  | "round_reset"
+  | "player_finish"
+  | "game_end"
+  | "new_round";
+
+export interface GameAction {
   id: string;
   playerId: string;
   playerName: string;
   playerAvatar: string;
-  action: "play" | "pass" | "start" | "win_round";
+  action: GameActionType;
   cards?: { suit: string; rank: string }[];
+  message?: string; // Custom message for special events
   timestamp: number;
 }
 
@@ -60,6 +71,11 @@ export function GameStateHUD({
 
   // Get action text
   const getActionText = (action: GameAction) => {
+    // Use custom message if provided
+    if (action.message) {
+      return action.message;
+    }
+
     switch (action.action) {
       case "play":
         return `เล่น ${formatCards(action.cards)}`;
@@ -68,9 +84,39 @@ export function GameStateHUD({
       case "start":
         return "เริ่มเกม";
       case "win_round":
-        return "ชนะรอบ!";
+        return "ชนะรอบ! 🎉";
+      case "round_reset":
+        return "ทุกคนผ่าน - เริ่มรอบใหม่";
+      case "player_finish":
+        return "ไพ่หมดแล้ว! 🏆";
+      case "game_end":
+        return "เกมจบแล้ว!";
+      case "new_round":
+        return "เริ่มเกมรอบใหม่";
       default:
         return "";
+    }
+  };
+
+  // Get action color
+  const getActionColor = (action: GameActionType) => {
+    switch (action) {
+      case "play":
+        return "text-green-400";
+      case "pass":
+        return "text-gray-400";
+      case "start":
+      case "new_round":
+        return "text-blue-400";
+      case "win_round":
+      case "player_finish":
+        return "text-yellow-400";
+      case "round_reset":
+        return "text-purple-400";
+      case "game_end":
+        return "text-red-400";
+      default:
+        return "text-white";
     }
   };
 
@@ -142,14 +188,7 @@ export function GameStateHUD({
                         {action.playerName}
                       </div>
                       <div
-                        className={cn(
-                          "text-xs",
-                          action.action === "pass"
-                            ? "text-gray-400"
-                            : action.action === "win_round"
-                            ? "text-yellow-400"
-                            : "text-green-400"
-                        )}
+                        className={cn("text-xs", getActionColor(action.action))}
                       >
                         {getActionText(action)}
                       </div>

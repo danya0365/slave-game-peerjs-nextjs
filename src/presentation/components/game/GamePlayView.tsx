@@ -30,7 +30,11 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { ConnectionLostModal } from "./ConnectionStatus";
-import { GameStateHUD } from "./GameStateHUD";
+import {
+  GameStateHUD,
+  type GameAction,
+  type GameActionType,
+} from "./GameStateHUD";
 import { GameControls, PlayArea } from "./PlayArea";
 import { OpponentHand, PlayerHand } from "./PlayerHand";
 
@@ -88,17 +92,7 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
   const [gameStarted, setGameStarted] = useState(false);
   const [roomNotFound, setRoomNotFound] = useState(false);
   const [connectionTimeout, setConnectionTimeout] = useState(false);
-  const [gameActions, setGameActions] = useState<
-    {
-      id: string;
-      playerId: string;
-      playerName: string;
-      playerAvatar: string;
-      action: "play" | "pass" | "start" | "win_round";
-      cards?: { suit: string; rank: string }[];
-      timestamp: number;
-    }[]
-  >([]);
+  const [gameActions, setGameActions] = useState<GameAction[]>([]);
 
   // Get my player info
   const myPlayerId = user?.id;
@@ -114,8 +108,9 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
   const addGameAction = useCallback(
     (
       playerId: string,
-      action: "play" | "pass" | "start" | "win_round",
-      cards?: Card[]
+      action: GameActionType,
+      cards?: Card[],
+      message?: string
     ) => {
       const player = gamePlayers.find((p) => p.id === playerId);
       if (!player) return;
@@ -129,11 +124,31 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
           playerAvatar: player.avatar,
           action,
           cards: cards?.map((c) => ({ suit: c.suit, rank: c.rank })),
+          message,
           timestamp: Date.now(),
         },
       ]);
     },
     [gamePlayers]
+  );
+
+  // Add system game action (no specific player)
+  const addSystemAction = useCallback(
+    (action: GameActionType, message: string) => {
+      setGameActions((prev) => [
+        ...prev,
+        {
+          id: `${Date.now()}-${Math.random()}`,
+          playerId: "system",
+          playerName: "ระบบ",
+          playerAvatar: "🎮",
+          action,
+          message,
+          timestamp: Date.now(),
+        },
+      ]);
+    },
+    []
   );
 
   // Initialize P2P connection
@@ -271,9 +286,8 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
         case "new_round": {
           // Host wants to start a new round - reset local state
           console.log("[GamePlayView] New round received");
+          addSystemAction("new_round", "🎴 เริ่มเกมรอบใหม่!");
           useGameStore.getState().resetRound();
-          // Clear game actions
-          setGameActions([]);
           break;
         }
 
@@ -295,7 +309,73 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
     applyRemotePass,
     setOnGameMessage,
     addGameAction,
+    addSystemAction,
   ]);
+
+  // Track finish order to add game logs when players finish
+  const finishOrder = useGameStore((s) => s.finishOrder);
+  const [prevFinishOrder, setPrevFinishOrder] = useState<string[]>([]);
+
+  useEffect(() => {
+    // Check for new finishers
+    if (finishOrder.length > prevFinishOrder.length) {
+      const newFinishers = finishOrder.slice(prevFinishOrder.length);
+      newFinishers.forEach((playerId, index) => {
+        const position = prevFinishOrder.length + index + 1;
+        const rankNames = ["👑 King", "🎖️ Noble", "👤 Commoner", "⛓️ Slave"];
+        const rankName = rankNames[position - 1] || "ออก";
+
+        const player = gamePlayers.find((p) => p.id === playerId);
+        if (player) {
+          addGameAction(
+            playerId,
+            "player_finish",
+            undefined,
+            `ไพ่หมดแล้ว! ได้ ${rankName}`
+          );
+        }
+      });
+    }
+    setPrevFinishOrder(finishOrder);
+  }, [finishOrder, prevFinishOrder, gamePlayers, addGameAction]);
+
+  // Track round number to add game logs when round resets
+  const [prevRoundNumber, setPrevRoundNumber] = useState(1);
+
+  useEffect(() => {
+    if (roundNumber > prevRoundNumber && phase === "playing") {
+      // Find the last player who played
+      const lastPlayerId = useGameStore.getState().lastPlayerId;
+      if (lastPlayerId) {
+        const player = gamePlayers.find((p) => p.id === lastPlayerId);
+        if (player) {
+          addGameAction(
+            lastPlayerId,
+            "round_reset",
+            undefined,
+            `ทุกคนผ่าน - ${player.name} ลงไพ่ใหม่`
+          );
+        }
+      } else {
+        addSystemAction("round_reset", "ทุกคนผ่าน - เริ่มรอบใหม่");
+      }
+    }
+    setPrevRoundNumber(roundNumber);
+  }, [
+    roundNumber,
+    prevRoundNumber,
+    phase,
+    gamePlayers,
+    addGameAction,
+    addSystemAction,
+  ]);
+
+  // Track game end
+  useEffect(() => {
+    if (phase === "game_end") {
+      addSystemAction("game_end", "🎊 เกมจบแล้ว! ดูผลคะแนน");
+    }
+  }, [phase, addSystemAction]);
 
   // Copy room code
   const copyRoomCode = async () => {
