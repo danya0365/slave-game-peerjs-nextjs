@@ -463,8 +463,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
       set({
         players: updatedPlayers,
         currentHand: null,
+        discardPile: [], // Clear discard pile for new round
         passCount: 0,
         currentPlayerIndex: lastPlayerIndex,
+        roundNumber: get().roundNumber + 1,
       });
     }
   },
