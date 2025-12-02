@@ -6,41 +6,76 @@ import { CardComponent } from "./CardComponent";
 
 interface PlayAreaProps {
   currentHand: PlayedHand | null;
+  discardPile: PlayedHand[];
   lastPlayerName?: string;
 }
 
 /**
- * Play Area Component - Center area showing current played cards
+ * Play Area Component - Center area showing all discarded cards
  */
-export function PlayArea({ currentHand, lastPlayerName }: PlayAreaProps) {
+export function PlayArea({
+  currentHand,
+  discardPile,
+  lastPlayerName,
+}: PlayAreaProps) {
+  // Show last 5 hands max to avoid overflow
+  const visibleHands = discardPile.slice(-5);
+
   return (
     <div className="relative">
       {/* Background table */}
-      <div className="w-64 h-40 rounded-2xl bg-green-800/50 border-4 border-green-700/50 flex items-center justify-center">
-        {currentHand ? (
-          <div className="flex flex-col items-center gap-2">
-            {/* Played cards */}
-            <div className="flex justify-center">
-              {currentHand.cards.map((card, index) => (
+      <div className="w-72 h-48 rounded-2xl bg-green-800/50 border-4 border-green-700/50 flex items-center justify-center overflow-hidden">
+        {discardPile.length > 0 ? (
+          <div className="relative w-full h-full flex items-center justify-center">
+            {/* Stacked discard pile */}
+            {visibleHands.map((hand, handIndex) => {
+              const isLatest = handIndex === visibleHands.length - 1;
+              // Stack cards with offset
+              const offsetX = (handIndex - visibleHands.length / 2) * 8;
+              const offsetY = (handIndex - visibleHands.length / 2) * 4;
+              const rotation = (handIndex - visibleHands.length / 2) * 3;
+
+              return (
                 <div
-                  key={card.id}
-                  className="transition-all duration-150"
+                  key={`hand-${handIndex}`}
+                  className={cn(
+                    "absolute transition-all duration-300",
+                    !isLatest && "opacity-60"
+                  )}
                   style={{
-                    marginLeft: index === 0 ? 0 : "-24px",
-                    transform: `rotate(${
-                      (index - (currentHand.cards.length - 1) / 2) * 5
-                    }deg)`,
-                    zIndex: index,
+                    transform: `translate(${offsetX}px, ${offsetY}px) rotate(${rotation}deg)`,
+                    zIndex: handIndex,
                   }}
                 >
-                  <CardComponent card={card} size="md" isPlayable={false} />
+                  <div className="flex">
+                    {hand.cards.map((card, cardIndex) => (
+                      <div
+                        key={card.id}
+                        style={{
+                          marginLeft: cardIndex === 0 ? 0 : "-28px",
+                          transform: `rotate(${
+                            (cardIndex - (hand.cards.length - 1) / 2) * 3
+                          }deg)`,
+                          zIndex: cardIndex,
+                        }}
+                      >
+                        <CardComponent
+                          card={card}
+                          size={isLatest ? "md" : "sm"}
+                          isPlayable={false}
+                        />
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              ))}
-            </div>
+              );
+            })}
 
-            {/* Player name */}
+            {/* Latest player name */}
             {lastPlayerName && (
-              <div className="text-white/80 text-sm">{lastPlayerName}</div>
+              <div className="absolute bottom-2 left-1/2 -translate-x-1/2 text-white/80 text-sm bg-black/40 px-2 py-1 rounded">
+                {lastPlayerName}
+              </div>
             )}
           </div>
         ) : (
@@ -54,6 +89,13 @@ export function PlayArea({ currentHand, lastPlayerName }: PlayAreaProps) {
       {currentHand && (
         <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 bg-gray-800 text-white text-xs font-medium rounded-full">
           {getHandTypeName(currentHand.type)}
+        </div>
+      )}
+
+      {/* Card count badge */}
+      {discardPile.length > 0 && (
+        <div className="absolute -bottom-2 right-2 px-2 py-0.5 bg-gray-700 text-white text-xs rounded-full">
+          {discardPile.reduce((sum, h) => sum + h.cards.length, 0)} ใบ
         </div>
       )}
     </div>

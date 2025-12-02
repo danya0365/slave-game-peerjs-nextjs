@@ -70,6 +70,7 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
     phase,
     players: gamePlayers,
     currentHand,
+    discardPile,
     isFirstTurn,
     initializeGame,
     playCards: gamePlayCards,
@@ -631,6 +632,7 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
             <PlayArea
               currentHand={currentHand}
+              discardPile={discardPile}
               lastPlayerName={
                 currentHand
                   ? gamePlayers.find((p) => p.id === currentHand.playerId)?.name

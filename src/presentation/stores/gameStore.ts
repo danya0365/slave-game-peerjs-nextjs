@@ -43,6 +43,7 @@ interface GameState {
   currentHand: PlayedHand | null;
   lastPlayerId: string | null;
   passCount: number;
+  discardPile: PlayedHand[]; // All played hands on the table
 
   // First turn flag (must play 3♣)
   isFirstTurn: boolean;
@@ -100,6 +101,7 @@ const initialState: GameState = {
   currentHand: null,
   lastPlayerId: null,
   passCount: 0,
+  discardPile: [],
   isFirstTurn: true,
   finishOrder: [],
 };
@@ -211,6 +213,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       lastPlayerId: playerId,
       passCount: 0,
       isFirstTurn: false,
+      discardPile: [...state.discardPile, playedHand],
       finishOrder: playerFinished
         ? [...state.finishOrder, playerId]
         : state.finishOrder,
@@ -300,6 +303,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       lastPlayerId: playerId,
       passCount: 0,
       isFirstTurn: false,
+      discardPile: [...state.discardPile, playedHand],
       finishOrder: playerFinished
         ? [...state.finishOrder, playerId]
         : state.finishOrder,
