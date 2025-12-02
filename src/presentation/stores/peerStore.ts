@@ -510,7 +510,8 @@ export const usePeerStore = create<PeerStore>((set, get) => ({
       case "pass_turn":
       case "round_end":
       case "game_end":
-      case "game_start": {
+      case "game_start":
+      case "new_round": {
         const { onGameMessage, room, connections } = get();
 
         // Forward to local game handler

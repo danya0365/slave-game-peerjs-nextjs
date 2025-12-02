@@ -28,6 +28,7 @@ export type MessageType =
   | "pass_turn"
   | "round_end"
   | "game_end"
+  | "new_round"
   | "chat"
   | "ping"
   | "pong"
@@ -115,6 +116,11 @@ export interface GameEndMessage extends BaseMessage {
   rankings: { playerId: string; rank: number }[]; // 1=King, 2=Noble, 3=Commoner, 4=Slave
 }
 
+// New round message (host broadcasts to start a new round)
+export interface NewRoundMessage extends BaseMessage {
+  type: "new_round";
+}
+
 // Chat message
 export interface ChatMessage extends BaseMessage {
   type: "chat";
@@ -150,6 +156,7 @@ export type PeerMessage =
   | PassTurnMessage
   | RoundEndMessage
   | GameEndMessage
+  | NewRoundMessage
   | ChatMessage
   | PingMessage
   | PongMessage

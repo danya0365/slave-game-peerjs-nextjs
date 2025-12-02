@@ -268,6 +268,15 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
           break;
         }
 
+        case "new_round": {
+          // Host wants to start a new round - reset local state
+          console.log("[GamePlayView] New round received");
+          useGameStore.getState().resetRound();
+          // Clear game actions
+          setGameActions([]);
+          break;
+        }
+
         default:
           console.log("[GamePlayView] Unhandled game message:", message.type);
       }
@@ -784,8 +793,17 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
             {isHost && (
               <button
                 onClick={() => {
-                  // TODO: Implement play again - deal new cards
+                  // Broadcast new_round to all players
+                  const message = {
+                    type: "new_round" as const,
+                    senderId: peerId!,
+                    timestamp: Date.now(),
+                  };
+                  broadcastToAll(message);
+
+                  // Reset local state
                   useGameStore.getState().resetRound();
+                  setGameActions([]);
                 }}
                 className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-green-500 hover:bg-green-600 text-white font-medium transition-colors"
               >
