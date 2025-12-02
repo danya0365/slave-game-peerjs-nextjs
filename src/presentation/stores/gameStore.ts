@@ -83,7 +83,7 @@ interface GameActions {
 
   // Game flow
   nextTurn: () => void;
-  checkRoundEnd: () => void;
+  checkRoundEnd: () => boolean; // Returns true if round ended
   checkGameEnd: () => void;
 
   // Reset
@@ -258,10 +258,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
       passCount: state.passCount + 1,
     });
 
-    // Check if round should end
-    get().checkRoundEnd();
+    // Check if round should end - if true, turn is already set to lastPlayer
+    const roundEnded = get().checkRoundEnd();
 
-    if (get().phase === "playing") {
+    // Only call nextTurn if round didn't end
+    if (!roundEnded && get().phase === "playing") {
       get().nextTurn();
     }
 
@@ -339,10 +340,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
       passCount: state.passCount + 1,
     });
 
-    // Check if round should end
-    get().checkRoundEnd();
+    // Check if round should end - if true, turn is already set to lastPlayer
+    const roundEnded = get().checkRoundEnd();
 
-    if (get().phase === "playing") {
+    // Only call nextTurn if round didn't end
+    if (!roundEnded && get().phase === "playing") {
       get().nextTurn();
     }
   },
@@ -443,6 +445,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   // Check if round should end (all other players passed)
+  // Returns true if round ended and turn was set to lastPlayer
   checkRoundEnd: () => {
     const { passCount, players, finishOrder, lastPlayerId } = get();
 
@@ -468,7 +471,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
         currentPlayerIndex: lastPlayerIndex,
         roundNumber: get().roundNumber + 1,
       });
+
+      return true; // Round ended, turn already set
     }
+
+    return false; // Round didn't end, need to call nextTurn
   },
 
   // Check if game should end
