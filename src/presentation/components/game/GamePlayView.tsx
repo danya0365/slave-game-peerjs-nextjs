@@ -262,6 +262,40 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
           });
 
           setGameStarted(true);
+
+          // Add game start logs with delays for CLIENT
+          const playerCount = useGameStore.getState().players.length;
+          const cardsPerPlayer = allHandCounts?.[0] ?? 13;
+          const startingPlayer =
+            useGameStore.getState().players[startingPlayerIndex];
+
+          // Step 1: เริ่มเกม
+          addSystemAction("game_starting", "🎮 เริ่มเกม!");
+
+          // Step 2: กำลังแจกไพ่ (หน่วง 1 วิ)
+          setTimeout(() => {
+            addSystemAction("dealing_cards", "🃏 กำลังแจกไพ่...");
+          }, 1000);
+
+          // Step 3: รายละเอียดแจกไพ่ (หน่วง 2 วิ)
+          setTimeout(() => {
+            addSystemAction(
+              "deal_complete",
+              `✅ แจกไพ่เรียบร้อย! ${playerCount} ผู้เล่น คนละ ${cardsPerPlayer} ใบ`
+            );
+          }, 2000);
+
+          // Step 4: ถึงตาใคร (หน่วง 3 วิ)
+          setTimeout(() => {
+            if (startingPlayer) {
+              addGameAction(
+                startingPlayer.id,
+                "turn_change",
+                undefined,
+                `🎯 ถึงตา ${startingPlayer.name} (มี 3♣️)`
+              );
+            }
+          }, 3000);
           break;
         }
 
@@ -340,10 +374,17 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
   }, [finishOrder, prevFinishOrder, gamePlayers, addGameAction]);
 
   // Track round number to add game logs when round resets
-  const [prevRoundNumber, setPrevRoundNumber] = useState(1);
+  // Start from -1 to skip the initial round (1)
+  const [prevRoundNumber, setPrevRoundNumber] = useState(-1);
 
   useEffect(() => {
-    if (roundNumber > prevRoundNumber && phase === "playing") {
+    // Skip if this is the first time (game just started)
+    // Only log when round changes AFTER the game has been running
+    if (
+      prevRoundNumber > 0 &&
+      roundNumber > prevRoundNumber &&
+      phase === "playing"
+    ) {
       // Find the last player who played
       const lastPlayerId = useGameStore.getState().lastPlayerId;
       if (lastPlayerId) {
@@ -356,19 +397,10 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
             `ทุกคนผ่าน - ${player.name} ลงไพ่ใหม่`
           );
         }
-      } else {
-        addSystemAction("round_reset", "ทุกคนผ่าน - เริ่มรอบใหม่");
       }
     }
     setPrevRoundNumber(roundNumber);
-  }, [
-    roundNumber,
-    prevRoundNumber,
-    phase,
-    gamePlayers,
-    addGameAction,
-    addSystemAction,
-  ]);
+  }, [roundNumber, prevRoundNumber, phase, gamePlayers, addGameAction]);
 
   // Track game end
   useEffect(() => {
@@ -376,6 +408,42 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
       addSystemAction("game_end", "🎊 เกมจบแล้ว! ดูผลคะแนน");
     }
   }, [phase, addSystemAction]);
+
+  // Track turn changes (skip first turn as it's logged in deal_cards)
+  const [prevTurnPlayerId, setPrevTurnPlayerId] = useState<string | null>(null);
+  const [hasDoneFirstTurn, setHasDoneFirstTurn] = useState(false);
+
+  useEffect(() => {
+    if (phase !== "playing") return;
+
+    const currentTurnId = currentTurnPlayer?.id;
+    if (!currentTurnId) return;
+
+    // Skip if same player
+    if (currentTurnId === prevTurnPlayerId) return;
+
+    // Skip first turn (already logged in deal_cards)
+    if (!hasDoneFirstTurn) {
+      setHasDoneFirstTurn(true);
+      setPrevTurnPlayerId(currentTurnId);
+      return;
+    }
+
+    // Log turn change
+    addGameAction(
+      currentTurnId,
+      "turn_change",
+      undefined,
+      `ถึงตา ${currentTurnPlayer.name}`
+    );
+    setPrevTurnPlayerId(currentTurnId);
+  }, [
+    currentTurnPlayer,
+    prevTurnPlayerId,
+    hasDoneFirstTurn,
+    phase,
+    addGameAction,
+  ]);
 
   // Copy room code
   const copyRoomCode = async () => {
@@ -419,6 +487,39 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
     // Get all hand counts for sending to clients
     const allHandCounts = gameState.players.map((p) => p.hand.length);
 
+    // Add game start logs with delays for HOST
+    const playerCount = gameState.players.length;
+    const cardsPerPlayer = allHandCounts[0] ?? 13;
+    const startingPlayer = gameState.players[gameState.currentPlayerIndex];
+
+    // Step 1: เริ่มเกม
+    addSystemAction("game_starting", "🎮 เริ่มเกม!");
+
+    // Step 2: กำลังแจกไพ่ (หน่วง 1 วิ)
+    setTimeout(() => {
+      addSystemAction("dealing_cards", "🃏 กำลังแจกไพ่...");
+    }, 1000);
+
+    // Step 3: รายละเอียดแจกไพ่ (หน่วง 2 วิ)
+    setTimeout(() => {
+      addSystemAction(
+        "deal_complete",
+        `✅ แจกไพ่เรียบร้อย! ${playerCount} ผู้เล่น คนละ ${cardsPerPlayer} ใบ`
+      );
+    }, 2000);
+
+    // Step 4: ถึงตาใคร (หน่วง 3 วิ)
+    setTimeout(() => {
+      if (startingPlayer) {
+        addGameAction(
+          startingPlayer.id,
+          "turn_change",
+          undefined,
+          `🎯 ถึงตา ${startingPlayer.name} (มี 3♣️)`
+        );
+      }
+    }, 3000);
+
     // Send each player their hand
     players.forEach((player, index) => {
       const hand = gameState.players[index]?.hand ?? [];
@@ -433,7 +534,7 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
       };
 
       if (player.peerId === peerId) {
-        // Local (host) - already has cards
+        // Local (host) - already has cards and logs added above
       } else {
         const conn = connections.get(player.peerId);
         if (conn?.open) {
@@ -441,7 +542,15 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
         }
       }
     });
-  }, [isHost, players, peerId, connections, initializeGame]);
+  }, [
+    isHost,
+    players,
+    peerId,
+    connections,
+    initializeGame,
+    addSystemAction,
+    addGameAction,
+  ]);
 
   // Handle card selection
   const handleCardSelect = (card: Card) => {

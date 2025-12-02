@@ -12,7 +12,11 @@ export type GameActionType =
   | "round_reset"
   | "player_finish"
   | "game_end"
-  | "new_round";
+  | "new_round"
+  | "game_starting"
+  | "dealing_cards"
+  | "deal_complete"
+  | "turn_change";
 
 export interface GameAction {
   id: string;
@@ -93,6 +97,14 @@ export function GameStateHUD({
         return "เกมจบแล้ว!";
       case "new_round":
         return "เริ่มเกมรอบใหม่";
+      case "game_starting":
+        return "🎮 เริ่มเกม!";
+      case "dealing_cards":
+        return "🃏 กำลังแจกไพ่...";
+      case "deal_complete":
+        return "แจกไพ่เรียบร้อย";
+      case "turn_change":
+        return "ถึงตาเล่น";
       default:
         return "";
     }
@@ -107,6 +119,9 @@ export function GameStateHUD({
         return "text-gray-400";
       case "start":
       case "new_round":
+      case "game_starting":
+      case "dealing_cards":
+      case "deal_complete":
         return "text-blue-400";
       case "win_round":
       case "player_finish":
@@ -115,6 +130,8 @@ export function GameStateHUD({
         return "text-purple-400";
       case "game_end":
         return "text-red-400";
+      case "turn_change":
+        return "text-cyan-400";
       default:
         return "text-white";
     }
