@@ -53,10 +53,10 @@ export const SUIT_DISPLAY: Record<
   Suit,
   { symbol: string; name: string; color: string }
 > = {
-  spade: { symbol: "♠", name: "โพดำ", color: "text-gray-900 dark:text-white" },
+  spade: { symbol: "♠", name: "โพดำ", color: "text-black" },
   heart: { symbol: "♥", name: "โพแดง", color: "text-red-500" },
   diamond: { symbol: "♦", name: "ข้าวหลามตัด", color: "text-red-500" },
-  club: { symbol: "♣", name: "ดอกจิก", color: "text-gray-900 dark:text-white" },
+  club: { symbol: "♣", name: "ดอกจิก", color: "text-black" },
 };
 
 // Rank display info

@@ -627,8 +627,8 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
             </div>
           )}
 
-          {/* Center play area */}
-          <div className="mb-8">
+          {/* Center play area - absolutely positioned in center */}
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
             <PlayArea
               currentHand={currentHand}
               lastPlayerName={
@@ -639,8 +639,8 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
             />
           </div>
 
-          {/* My hand */}
-          <div className="mt-auto">
+          {/* My hand - positioned at bottom center */}
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex flex-col items-center">
             <PlayerHand
               cards={myHand}
               selectedCards={selectedCards}
