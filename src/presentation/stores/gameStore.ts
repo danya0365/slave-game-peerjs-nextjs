@@ -393,10 +393,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   // Check if player can pass
   canPass: (playerId) => {
-    const { players, currentPlayerIndex, isFirstTurn, phase } = get();
+    const { players, currentPlayerIndex, isFirstTurn, phase, currentHand } =
+      get();
 
     if (phase !== "playing") return false;
     if (isFirstTurn) return false;
+
+    // Cannot pass if no current hand (round just reset - must play new cards)
+    if (currentHand === null) return false;
 
     const playerIndex = players.findIndex((p) => p.id === playerId);
     return playerIndex === currentPlayerIndex;
