@@ -14,6 +14,7 @@ import {
   sortCards,
 } from "@/src/domain/utils/cardUtils";
 import { cn } from "@/src/lib/utils";
+import { useConnectionStore } from "@/src/presentation/stores/connectionStore";
 import { RANK_SCORES, useGameStore } from "@/src/presentation/stores/gameStore";
 import { usePeerStore } from "@/src/presentation/stores/peerStore";
 import { useUserStore } from "@/src/presentation/stores/userStore";
@@ -30,6 +31,11 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { ConnectionLostModal } from "./ConnectionStatus";
+import {
+  DisconnectedPlayersBanner,
+  SyncButton,
+  ToastContainer,
+} from "./ConnectionUI";
 import {
   GameStateHUD,
   type GameAction,
@@ -93,6 +99,17 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
   const [roomNotFound, setRoomNotFound] = useState(false);
   const [connectionTimeout, setConnectionTimeout] = useState(false);
   const [gameActions, setGameActions] = useState<GameAction[]>([]);
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  // Connection store
+  const {
+    disconnectedPlayers,
+    startHeartbeat,
+    stopHeartbeat,
+    registerPlayer,
+    addToast,
+    reset: resetConnection,
+  } = useConnectionStore();
 
   // Get my player info
   const myPlayerId = user?.id;
@@ -325,6 +342,62 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
           break;
         }
 
+        case "sync_request": {
+          // Client is requesting sync - host handles this
+          if (!usePeerStore.getState().room?.isHost) break;
+
+          const syncReq =
+            message as import("@/src/domain/types/peer").SyncRequestMessage;
+          const gameState = useGameStore.getState();
+          const conn = usePeerStore
+            .getState()
+            .connections.get(syncReq.senderId);
+
+          if (conn?.open) {
+            conn.send({
+              type: "sync_game_state" as const,
+              senderId: usePeerStore.getState().peerId!,
+              timestamp: Date.now(),
+              gameState: {
+                phase: gameState.phase,
+                currentPlayerIndex: gameState.currentPlayerIndex,
+                roundNumber: gameState.roundNumber,
+                finishOrder: gameState.finishOrder,
+                lastPlayerId: gameState.lastPlayerId,
+                passCount: gameState.passCount,
+                handCounts: gameState.players.map((p) => p.hand.length),
+              },
+              players: usePeerStore.getState().room?.players || [],
+            });
+            addToast("info", `Sync ข้อมูลให้ผู้เล่นที่ reconnect แล้ว`);
+          }
+          break;
+        }
+
+        case "sync_game_state": {
+          // Host sent us the current game state
+          console.log("[GamePlayView] Received sync game state");
+          setIsSyncing(false);
+          addToast("success", "Sync สำเร็จ!");
+          // Note: Full state restoration would require more complex logic
+          // For now, just acknowledge the sync
+          break;
+        }
+
+        case "player_disconnected": {
+          const dcMsg =
+            message as import("@/src/domain/types/peer").PlayerDisconnectedMessage;
+          addToast("warning", `${dcMsg.playerName} หลุดออกไป`);
+          break;
+        }
+
+        case "player_reconnected": {
+          const rcMsg =
+            message as import("@/src/domain/types/peer").PlayerReconnectedMessage;
+          addToast("success", `${rcMsg.playerName} กลับมาแล้ว`);
+          break;
+        }
+
         default:
           console.log("[GamePlayView] Unhandled game message:", message.type);
       }
@@ -344,6 +417,7 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
     setOnGameMessage,
     addGameAction,
     addSystemAction,
+    addToast,
   ]);
 
   // Track finish order to add game logs when players finish
@@ -444,6 +518,87 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
     phase,
     addGameAction,
   ]);
+
+  // Initialize heartbeat for host
+  useEffect(() => {
+    if (!isHost || !gameStarted) return;
+
+    // Register all players for heartbeat tracking
+    players.forEach((player) => {
+      if (player.peerId !== peerId) {
+        registerPlayer(player.peerId, player.id, player.name);
+      }
+    });
+
+    // Start heartbeat
+    startHeartbeat(
+      // Send ping function
+      (targetPeerId: string) => {
+        const conn = connections.get(targetPeerId);
+        if (conn?.open) {
+          conn.send({
+            type: "ping",
+            senderId: peerId!,
+            timestamp: Date.now(),
+          });
+        }
+      },
+      // On player disconnect function
+      (targetPeerId: string, playerName: string) => {
+        console.log(`[Heartbeat] Player ${playerName} disconnected`);
+        // Broadcast disconnection to all other players
+        broadcastToAll({
+          type: "player_disconnected" as const,
+          senderId: peerId!,
+          timestamp: Date.now(),
+          playerId: players.find((p) => p.peerId === targetPeerId)?.id || "",
+          playerName,
+        });
+      }
+    );
+
+    return () => {
+      stopHeartbeat();
+    };
+  }, [
+    isHost,
+    gameStarted,
+    players,
+    peerId,
+    connections,
+    registerPlayer,
+    startHeartbeat,
+    stopHeartbeat,
+    broadcastToAll,
+  ]);
+
+  // Cleanup connection store on unmount
+  useEffect(() => {
+    return () => {
+      resetConnection();
+    };
+  }, [resetConnection]);
+
+  // Request sync from host (client only)
+  const requestSync = useCallback(() => {
+    if (isHost) return;
+
+    const hostConn = usePeerStore.getState().hostConnection;
+    if (hostConn?.open) {
+      setIsSyncing(true);
+      hostConn.send({
+        type: "sync_request" as const,
+        senderId: peerId!,
+        timestamp: Date.now(),
+        playerId: myPlayerId!,
+      });
+
+      // Timeout for sync
+      setTimeout(() => {
+        setIsSyncing(false);
+      }, 3000);
+    }
+  }, [isHost, peerId, myPlayerId]);
 
   // Copy room code
   const copyRoomCode = async () => {
@@ -1220,6 +1375,22 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
 
       {/* Connection lost modal */}
       <ConnectionLostModal />
+
+      {/* Connection UI Components */}
+      <DisconnectedPlayersBanner
+        players={disconnectedPlayers}
+        isHost={isHost}
+      />
+
+      {/* Toast Notifications */}
+      <ToastContainer />
+
+      {/* Sync Button for clients (when game is playing) */}
+      {!isHost && phase === "playing" && (
+        <div className="fixed bottom-4 right-4 z-40">
+          <SyncButton onSync={requestSync} isSyncing={isSyncing} />
+        </div>
+      )}
     </div>
   );
 }

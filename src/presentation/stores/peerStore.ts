@@ -515,7 +515,8 @@ export const usePeerStore = create<PeerStore>((set, get) => ({
       case "round_end":
       case "game_end":
       case "game_start":
-      case "new_round": {
+      case "new_round":
+      case "sync_game_state": {
         const { onGameMessage, room, connections } = get();
 
         // Forward to local game handler
@@ -536,6 +537,57 @@ export const usePeerStore = create<PeerStore>((set, get) => ({
               conn.send(message);
             }
           });
+        }
+        break;
+      }
+
+      // Ping/Pong for connection health
+      case "ping": {
+        // Respond with pong
+        const { room, connections, hostConnection, peerId } = get();
+        const pongMessage: PeerMessage = {
+          type: "pong",
+          senderId: peerId!,
+          timestamp: Date.now(),
+        };
+
+        if (room?.isHost) {
+          // Host sends pong back to the client who pinged
+          const conn = connections.get(fromPeerId);
+          if (conn?.open) {
+            conn.send(pongMessage);
+          }
+        } else if (hostConnection?.open) {
+          // Client sends pong back to host
+          hostConnection.send(pongMessage);
+        }
+        break;
+      }
+
+      case "pong": {
+        // Connection health update handled by connectionStore
+        // This is just acknowledged - actual tracking is done externally
+        console.log("[PeerJS] Pong received from:", fromPeerId);
+        break;
+      }
+
+      // Sync request (client asks for current game state)
+      case "sync_request": {
+        const { room, onGameMessage } = get();
+
+        // Only host handles sync requests
+        if (room?.isHost && onGameMessage) {
+          onGameMessage(message);
+        }
+        break;
+      }
+
+      // Player disconnected/reconnected notifications
+      case "player_disconnected":
+      case "player_reconnected": {
+        const { onGameMessage } = get();
+        if (onGameMessage) {
+          onGameMessage(message);
         }
         break;
       }

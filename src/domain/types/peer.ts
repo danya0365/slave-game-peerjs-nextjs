@@ -4,6 +4,9 @@
 
 import type { Card, PlayedHand } from "./card";
 
+// Player connection health status
+export type PlayerConnectionStatus = "online" | "unstable" | "offline";
+
 // Player info sent over P2P
 export interface PeerPlayer {
   peerId: string;
@@ -13,6 +16,8 @@ export interface PeerPlayer {
   isHost: boolean;
   isReady: boolean;
   isConnected: boolean;
+  connectionHealth?: PlayerConnectionStatus;
+  lastPingTime?: number;
 }
 
 // Message types
@@ -33,6 +38,10 @@ export type MessageType =
   | "ping"
   | "pong"
   | "sync_players"
+  | "sync_request"
+  | "sync_game_state"
+  | "player_disconnected"
+  | "player_reconnected"
   | "kick_player"
   | "error";
 
@@ -137,6 +146,42 @@ export interface PongMessage extends BaseMessage {
   type: "pong";
 }
 
+// Sync request message (client asks host for current game state)
+export interface SyncRequestMessage extends BaseMessage {
+  type: "sync_request";
+  playerId: string;
+}
+
+// Sync game state message (host sends current game state)
+export interface SyncGameStateMessage extends BaseMessage {
+  type: "sync_game_state";
+  gameState: {
+    phase: string;
+    currentPlayerIndex: number;
+    roundNumber: number;
+    finishOrder: string[];
+    lastPlayerId: string | null;
+    passCount: number;
+    // Hand counts for each player
+    handCounts: number[];
+  };
+  players: PeerPlayer[];
+}
+
+// Player disconnected notification
+export interface PlayerDisconnectedMessage extends BaseMessage {
+  type: "player_disconnected";
+  playerId: string;
+  playerName: string;
+}
+
+// Player reconnected notification
+export interface PlayerReconnectedMessage extends BaseMessage {
+  type: "player_reconnected";
+  playerId: string;
+  playerName: string;
+}
+
 // Error message
 export interface ErrorMessage extends BaseMessage {
   type: "error";
@@ -160,6 +205,10 @@ export type PeerMessage =
   | ChatMessage
   | PingMessage
   | PongMessage
+  | SyncRequestMessage
+  | SyncGameStateMessage
+  | PlayerDisconnectedMessage
+  | PlayerReconnectedMessage
   | ErrorMessage;
 
 // Connection status
