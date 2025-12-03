@@ -442,9 +442,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       attempts++;
 
       // Skip players who have finished OR passed this round
-      const nextPlayer = players[nextIndex];
-      const hasFinished = finishOrder.includes(nextPlayer.id);
-      const hasPassed = nextPlayer.hasPassed;
+      const candidate = players[nextIndex];
+      const hasFinished = finishOrder.includes(candidate.id);
+      const hasPassed = candidate.hasPassed;
 
       // Only stop if player hasn't finished AND hasn't passed
       if (!hasFinished && !hasPassed) {
@@ -452,7 +452,27 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     } while (attempts < 4);
 
-    const nextPlayer = players[nextIndex];
+    let nextPlayer = players[nextIndex];
+
+    // Safety check: if the selected next player has finished, skip to next active
+    if (finishOrder.includes(nextPlayer.id)) {
+      // All remaining players might have finished - check game end
+      const activePlayers = players.filter((p) => !finishOrder.includes(p.id));
+      if (activePlayers.length <= 1) {
+        // Game should end
+        get().checkGameEnd();
+        return;
+      }
+      // Find any active player
+      for (let i = 0; i < 4; i++) {
+        const idx = (nextIndex + i) % 4;
+        if (!finishOrder.includes(players[idx].id)) {
+          nextIndex = idx;
+          nextPlayer = players[nextIndex]; // Update nextPlayer reference
+          break;
+        }
+      }
+    }
 
     // Check if next player is the same as lastPlayer (everyone else passed)
     // This means round should reset - the next player won this round

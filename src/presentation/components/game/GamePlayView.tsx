@@ -843,6 +843,17 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
       return;
     }
 
+    // Skip if AI has already finished (no cards left)
+    if (currentPlayer.hand.length === 0 || currentPlayer.finishOrder !== null) {
+      console.log(
+        `AI ${currentPlayer.id} has finished, skipping turn and calling nextTurn`
+      );
+      aiTurnInProgress.current = false;
+      // Force next turn to skip this finished player
+      useGameStore.getState().nextTurn();
+      return;
+    }
+
     // Reset lock if:
     // 1. Different AI's turn now
     // 2. Same AI but different round (round reset - everyone passed back to this AI)
