@@ -365,16 +365,28 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   // Check if player can play these cards
   canPlayCards: (playerId, cards) => {
-    const { players, currentPlayerIndex, currentHand, isFirstTurn, phase } =
-      get();
+    const {
+      players,
+      currentPlayerIndex,
+      currentHand,
+      isFirstTurn,
+      phase,
+      finishOrder,
+    } = get();
 
     if (phase !== "playing") return false;
     if (cards.length === 0) return false;
+
+    // Player already finished
+    if (finishOrder.includes(playerId)) return false;
 
     const playerIndex = players.findIndex((p) => p.id === playerId);
     if (playerIndex !== currentPlayerIndex) return false;
 
     const player = players[playerIndex];
+
+    // Player has no cards
+    if (player.hand.length === 0) return false;
 
     // Check if player has these cards
     const hasAllCards = cards.every((card) =>
@@ -395,17 +407,31 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   // Check if player can pass
   canPass: (playerId) => {
-    const { players, currentPlayerIndex, isFirstTurn, phase, currentHand } =
-      get();
+    const {
+      players,
+      currentPlayerIndex,
+      isFirstTurn,
+      phase,
+      currentHand,
+      finishOrder,
+    } = get();
 
     if (phase !== "playing") return false;
     if (isFirstTurn) return false;
+
+    // Player already finished
+    if (finishOrder.includes(playerId)) return false;
 
     // Cannot pass if no current hand (round just reset - must play new cards)
     if (currentHand === null) return false;
 
     const playerIndex = players.findIndex((p) => p.id === playerId);
-    return playerIndex === currentPlayerIndex;
+    if (playerIndex !== currentPlayerIndex) return false;
+
+    // Player has no cards
+    if (players[playerIndex].hand.length === 0) return false;
+
+    return true;
   },
 
   // Get current player
@@ -534,21 +560,35 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     // Round ends when all other active players have passed
     if (passCount >= activePlayers.length - 1 && lastPlayerId) {
+      // Check if lastPlayer has finished - if so, find next active player
+      const lastPlayerFinished = finishOrder.includes(lastPlayerId);
+      let roundWinnerIndex = players.findIndex((p) => p.id === lastPlayerId);
+
+      if (lastPlayerFinished) {
+        // Find next active player after the finished player
+        for (let i = 1; i <= 4; i++) {
+          const searchIndex = (roundWinnerIndex + i) % 4;
+          const candidate = players[searchIndex];
+          if (!finishOrder.includes(candidate.id)) {
+            roundWinnerIndex = searchIndex;
+            break;
+          }
+        }
+      }
+
       // Reset for new round
-      const updatedPlayers = players.map((player) => ({
+      const updatedPlayers = players.map((player, index) => ({
         ...player,
         hasPassed: false,
-        isCurrentTurn: player.id === lastPlayerId,
+        isCurrentTurn: index === roundWinnerIndex,
       }));
-
-      const lastPlayerIndex = players.findIndex((p) => p.id === lastPlayerId);
 
       set({
         players: updatedPlayers,
         currentHand: null,
         discardPile: [], // Clear discard pile for new round
         passCount: 0,
-        currentPlayerIndex: lastPlayerIndex,
+        currentPlayerIndex: roundWinnerIndex,
         roundNumber: get().roundNumber + 1,
       });
 

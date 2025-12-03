@@ -1557,25 +1557,60 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
 
           {/* My hand - positioned at bottom with controls */}
           <div className="absolute bottom-0 left-0 right-0 pb-2 md:pb-4 px-2 flex flex-col items-center z-30">
-            <PlayerHand
-              cards={myHand}
-              selectedCards={selectedCards}
-              onCardSelect={handleCardSelect}
-              isCurrentTurn={isMyTurn}
-              disabled={!isMyTurn}
-            />
+            {/* Show finish status when player has no cards */}
+            {myGamePlayer?.finishOrder && myHand.length === 0 ? (
+              <div className="flex flex-col items-center gap-2 py-4">
+                <div className="text-4xl">
+                  {myGamePlayer.finishOrder === 1 && "👑"}
+                  {myGamePlayer.finishOrder === 2 && "🎖️"}
+                  {myGamePlayer.finishOrder === 3 && "👤"}
+                  {myGamePlayer.finishOrder === 4 && "⛓️"}
+                </div>
+                <div
+                  className={`text-lg font-bold ${
+                    myGamePlayer.finishOrder === 1
+                      ? "text-yellow-400"
+                      : myGamePlayer.finishOrder === 2
+                      ? "text-purple-400"
+                      : myGamePlayer.finishOrder === 3
+                      ? "text-blue-400"
+                      : "text-gray-400"
+                  }`}
+                >
+                  {myGamePlayer.finishOrder === 1 && "King! 🎉"}
+                  {myGamePlayer.finishOrder === 2 && "Noble"}
+                  {myGamePlayer.finishOrder === 3 && "Commoner"}
+                  {myGamePlayer.finishOrder === 4 && "Slave"}
+                </div>
+                <div className="text-gray-400 text-sm">
+                  รอผู้เล่นอื่นจบเกม...
+                </div>
+              </div>
+            ) : (
+              <>
+                <PlayerHand
+                  cards={myHand}
+                  selectedCards={selectedCards}
+                  onCardSelect={handleCardSelect}
+                  isCurrentTurn={isMyTurn}
+                  disabled={!isMyTurn}
+                />
 
-            {/* Controls - compact on mobile */}
-            <div className="mt-2 md:mt-4 flex justify-center">
-              <GameControls
-                onPlay={handlePlay}
-                onPass={handlePass}
-                canPlay={!!canPlaySelected}
-                canPass={!!myPlayerId && canPass(myPlayerId) && !isFirstTurn}
-                selectedCount={selectedCards.length}
-                isFirstTurn={isFirstTurn}
-              />
-            </div>
+                {/* Controls - compact on mobile */}
+                <div className="mt-2 md:mt-4 flex justify-center">
+                  <GameControls
+                    onPlay={handlePlay}
+                    onPass={handlePass}
+                    canPlay={!!canPlaySelected}
+                    canPass={
+                      !!myPlayerId && canPass(myPlayerId) && !isFirstTurn
+                    }
+                    selectedCount={selectedCards.length}
+                    isFirstTurn={isFirstTurn}
+                  />
+                </div>
+              </>
+            )}
           </div>
         </main>
 
