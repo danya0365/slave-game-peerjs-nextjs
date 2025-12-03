@@ -268,30 +268,27 @@ export function canBeat(
   // If no current hand, any valid hand can be played
   if (!currentHand) return true;
 
-  // Must be same type (with some exceptions)
+  // Must be same type (with some exceptions for special beats)
   if (newHand.type !== currentHand.type) {
-    // Four of a kind can beat any single 2
-    if (
-      newHand.type === "four" &&
-      currentHand.type === "single" &&
-      currentHand.highCard.rank === "2"
-    ) {
+    // Triple (ตอง) can beat any single card
+    if (newHand.type === "triple" && currentHand.type === "single") {
       return true;
     }
 
-    // Pair of 2s can be beaten by four of a kind
-    if (
-      newHand.type === "four" &&
-      currentHand.type === "pair" &&
-      currentHand.highCard.rank === "2"
-    ) {
+    // Four of a kind can beat any single card
+    if (newHand.type === "four" && currentHand.type === "single") {
+      return true;
+    }
+
+    // Four of a kind can beat any pair
+    if (newHand.type === "four" && currentHand.type === "pair") {
       return true;
     }
 
     return false;
   }
 
-  // Must have same number of cards
+  // Same type - must have same number of cards
   if (newHand.cards.length !== currentHand.cards.length) {
     return false;
   }

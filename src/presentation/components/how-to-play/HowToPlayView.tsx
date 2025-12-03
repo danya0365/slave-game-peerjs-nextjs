@@ -258,6 +258,27 @@ export function HowToPlayView() {
                       เรียงกัน
                     </p>
                   </div>
+
+                  {/* Special rules */}
+                  <div className="mt-4 p-4 bg-purple-50 dark:bg-purple-900/20 rounded-xl border border-purple-200 dark:border-purple-800">
+                    <p className="font-semibold text-purple-800 dark:text-purple-200 mb-2">
+                      ⚡ กฎพิเศษ: ทับข้ามประเภท
+                    </p>
+                    <div className="text-purple-700 dark:text-purple-300 space-y-1 text-sm">
+                      <p>
+                        • <strong>ตอง</strong> สามารถลงทับ{" "}
+                        <strong>ไพ่ใบเดียว</strong> ได้ทุกใบ
+                      </p>
+                      <p>
+                        • <strong>โฟร์</strong> สามารถลงทับ{" "}
+                        <strong>ไพ่ใบเดียว</strong> ได้ทุกใบ
+                      </p>
+                      <p>
+                        • <strong>โฟร์</strong> สามารถลงทับ{" "}
+                        <strong>ไพ่คู่</strong> ได้ทุกคู่
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
 
