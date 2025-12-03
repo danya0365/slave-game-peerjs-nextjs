@@ -34,12 +34,15 @@ import {
   Loader2,
   Trophy,
   Users,
+  Volume2,
+  VolumeX,
   Wifi,
   WifiOff,
 } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useSound } from "../../hooks/useSound";
 import { ChatContainer, type ChatMessageData } from "./ChatPanel";
 import { ConnectionLostModal } from "./ConnectionStatus";
 import {
@@ -103,6 +106,18 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
     canPlayCards,
     canPass,
   } = useGameStore();
+
+  // Sound effects
+  const {
+    enabled: soundEnabled,
+    toggleSound,
+    playCardPlay,
+    playCardSelect,
+    playPass,
+    playTurnStart,
+    playWin,
+    playGameStart,
+  } = useSound();
 
   // Local state
   const [copied, setCopied] = useState(false);
@@ -186,6 +201,33 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
     },
     []
   );
+
+  // Play sound when game starts
+  const prevGameStarted = useRef(false);
+  useEffect(() => {
+    if (gameStarted && !prevGameStarted.current) {
+      playGameStart();
+    }
+    prevGameStarted.current = gameStarted;
+  }, [gameStarted, playGameStart]);
+
+  // Play sound when it's my turn
+  const prevIsMyTurn = useRef(false);
+  useEffect(() => {
+    if (isMyTurn && !prevIsMyTurn.current && gameStarted) {
+      playTurnStart();
+    }
+    prevIsMyTurn.current = isMyTurn;
+  }, [isMyTurn, gameStarted, playTurnStart]);
+
+  // Play sound when I win (finish first)
+  useEffect(() => {
+    if (!myPlayerId || !gameStarted) return;
+    const myPlayer = gamePlayers.find((p) => p.id === myPlayerId);
+    if (myPlayer?.finishOrder === 1) {
+      playWin();
+    }
+  }, [gamePlayers, myPlayerId, gameStarted, playWin]);
 
   // Initialize P2P connection
   useEffect(() => {
@@ -1143,6 +1185,8 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
   const handleCardSelect = (card: Card) => {
     if (!isMyTurn) return;
 
+    playCardSelect(); // Play select sound
+
     setSelectedCards((prev) => {
       const isSelected = prev.some((c) => c.id === card.id);
       if (isSelected) {
@@ -1170,6 +1214,7 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
     // Execute play
     const success = gamePlayCards(myPlayerId, selectedCards);
     if (success) {
+      playCardPlay(); // Play card sound
       // Add to game history
       addGameAction(myPlayerId, "play", selectedCards);
 
@@ -1206,6 +1251,7 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
 
     const success = gamePass(myPlayerId);
     if (success) {
+      playPass(); // Play pass sound
       // Add to game history
       addGameAction(myPlayerId, "pass");
 
@@ -1359,7 +1405,20 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
                 />
               </button>
 
-              <Wifi className="w-4 h-4 text-green-400" />
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={toggleSound}
+                  className="p-1 rounded hover:bg-green-800 transition-colors"
+                  title={soundEnabled ? "ปิดเสียง" : "เปิดเสียง"}
+                >
+                  {soundEnabled ? (
+                    <Volume2 className="w-4 h-4 text-green-400" />
+                  ) : (
+                    <VolumeX className="w-4 h-4 text-gray-500" />
+                  )}
+                </button>
+                <Wifi className="w-4 h-4 text-green-400" />
+              </div>
             </div>
           </div>
         </header>
