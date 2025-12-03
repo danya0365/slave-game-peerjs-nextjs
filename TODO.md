@@ -33,8 +33,8 @@
   - [x] สร้างห้อง (Create Room)
   - [x] เข้าร่วมห้อง (Join Room via Room Code)
   - [x] แสดงรายชื่อผู้เล่นในห้อง (UI)
-  - [ ] ระบบ Ready/Not Ready
-  - [ ] Chat ในห้อง (optional)
+  - [x] ระบบ Ready/Not Ready
+  - [x] Chat ในห้อง (ChatPanel component)
 - [x] สร้างหน้า Game (/game/[roomCode]) - UI Preview
 - [x] PeerJS Integration
   - [x] สร้าง peerStore (Zustand) สำหรับจัดการ connection
@@ -43,7 +43,7 @@
   - [x] Connection state management
   - [x] Player sync via P2P messages
   - [x] Ready/Unready system
-  - [ ] Reconnection handling
+  - [x] Reconnection handling (resume_game)
 
 ### ✅ Sprint 4: Game Engine
 
@@ -105,6 +105,11 @@
   - [x] ErrorDisplay (full page, inline)
   - [x] EmptyState
   - [x] Toast notifications
+- [x] Game Features
+  - [x] Skip passed players in nextTurn()
+  - [x] Resume game after refresh (resume_game message)
+  - [x] Sync discardPile on reconnect
+  - [x] Chat system (ChatPanel, ChatContainer)
 - [ ] Sound effects (optional)
 - [ ] Manual testing
 - [ ] Bug fixes
