@@ -23,17 +23,17 @@ export function PlayArea({
 
   return (
     <div className="relative">
-      {/* Background table */}
-      <div className="w-72 h-48 rounded-2xl bg-green-800/50 border-4 border-green-700/50 flex items-center justify-center overflow-hidden">
+      {/* Background table - smaller on mobile */}
+      <div className="w-44 h-28 md:w-72 md:h-48 rounded-xl md:rounded-2xl bg-green-800/50 border-2 md:border-4 border-green-700/50 flex items-center justify-center overflow-hidden">
         {discardPile.length > 0 ? (
           <div className="relative w-full h-full flex items-center justify-center">
             {/* Stacked discard pile */}
             {visibleHands.map((hand, handIndex) => {
               const isLatest = handIndex === visibleHands.length - 1;
-              // Stack cards with offset
-              const offsetX = (handIndex - visibleHands.length / 2) * 8;
-              const offsetY = (handIndex - visibleHands.length / 2) * 4;
-              const rotation = (handIndex - visibleHands.length / 2) * 3;
+              // Stack cards with offset - smaller on mobile
+              const offsetX = (handIndex - visibleHands.length / 2) * 4;
+              const offsetY = (handIndex - visibleHands.length / 2) * 2;
+              const rotation = (handIndex - visibleHands.length / 2) * 2;
 
               return (
                 <div
@@ -52,18 +52,28 @@ export function PlayArea({
                       <div
                         key={card.id}
                         style={{
-                          marginLeft: cardIndex === 0 ? 0 : "-28px",
+                          marginLeft: cardIndex === 0 ? 0 : "-18px",
                           transform: `rotate(${
-                            (cardIndex - (hand.cards.length - 1) / 2) * 3
+                            (cardIndex - (hand.cards.length - 1) / 2) * 2
                           }deg)`,
                           zIndex: cardIndex,
                         }}
                       >
-                        <CardComponent
-                          card={card}
-                          size={isLatest ? "md" : "sm"}
-                          isPlayable={false}
-                        />
+                        {/* Responsive card sizes */}
+                        <div className="block md:hidden">
+                          <CardComponent
+                            card={card}
+                            size={isLatest ? "sm" : "xs"}
+                            isPlayable={false}
+                          />
+                        </div>
+                        <div className="hidden md:block">
+                          <CardComponent
+                            card={card}
+                            size={isLatest ? "md" : "sm"}
+                            isPlayable={false}
+                          />
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -71,30 +81,30 @@ export function PlayArea({
               );
             })}
 
-            {/* Latest player name */}
+            {/* Latest player name - smaller on mobile */}
             {lastPlayerName && (
-              <div className="absolute bottom-2 left-1/2 -translate-x-1/2 text-white/80 text-sm bg-black/40 px-2 py-1 rounded">
+              <div className="absolute bottom-1 md:bottom-2 left-1/2 -translate-x-1/2 text-white/80 text-[10px] md:text-sm bg-black/40 px-1.5 md:px-2 py-0.5 md:py-1 rounded">
                 {lastPlayerName}
               </div>
             )}
           </div>
         ) : (
-          <div className="text-green-600/50 text-lg font-medium">
+          <div className="text-green-600/50 text-sm md:text-lg font-medium">
             ลงไพ่ที่นี่
           </div>
         )}
       </div>
 
-      {/* Hand type indicator */}
+      {/* Hand type indicator - smaller on mobile */}
       {currentHand && (
-        <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 bg-gray-800 text-white text-xs font-medium rounded-full">
+        <div className="absolute -top-2 md:-top-3 left-1/2 -translate-x-1/2 px-2 md:px-3 py-0.5 md:py-1 bg-gray-800 text-white text-[10px] md:text-xs font-medium rounded-full whitespace-nowrap">
           {getHandTypeName(currentHand.type)}
         </div>
       )}
 
       {/* Card count badge */}
       {discardPile.length > 0 && (
-        <div className="absolute -bottom-2 right-2 px-2 py-0.5 bg-gray-700 text-white text-xs rounded-full">
+        <div className="absolute -bottom-1 md:-bottom-2 right-1 md:right-2 px-1.5 md:px-2 py-0.5 bg-gray-700 text-white text-[10px] md:text-xs rounded-full">
           {discardPile.reduce((sum, h) => sum + h.cards.length, 0)} ใบ
         </div>
       )}
@@ -139,13 +149,13 @@ export function GameControls({
   isFirstTurn,
 }: GameControlsProps) {
   return (
-    <div className="flex items-center gap-4">
+    <div className="flex items-center gap-2 md:gap-4">
       {/* Pass button */}
       <button
         onClick={onPass}
         disabled={!canPass || isFirstTurn}
         className={cn(
-          "px-6 py-3 rounded-xl font-semibold transition-all",
+          "px-4 md:px-6 py-2 md:py-3 rounded-lg md:rounded-xl font-semibold text-sm md:text-base transition-all",
           canPass && !isFirstTurn
             ? "bg-gray-700 hover:bg-gray-600 text-white"
             : "bg-gray-800 text-gray-500 cursor-not-allowed"
@@ -159,7 +169,7 @@ export function GameControls({
         onClick={onPlay}
         disabled={!canPlay || selectedCount === 0}
         className={cn(
-          "px-8 py-3 rounded-xl font-semibold transition-all",
+          "px-5 md:px-8 py-2 md:py-3 rounded-lg md:rounded-xl font-semibold text-sm md:text-base transition-all",
           canPlay && selectedCount > 0
             ? "bg-linear-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white shadow-lg shadow-green-500/30"
             : "bg-gray-800 text-gray-500 cursor-not-allowed"
@@ -168,9 +178,9 @@ export function GameControls({
         ลงไพ่ ({selectedCount})
       </button>
 
-      {/* First turn hint */}
+      {/* First turn hint - hidden on mobile, shown on desktop */}
       {isFirstTurn && (
-        <div className="text-yellow-400 text-sm">ต้องลง 3♣ ในตานี้</div>
+        <div className="hidden md:block text-yellow-400 text-sm">ต้องลง 3♣</div>
       )}
     </div>
   );

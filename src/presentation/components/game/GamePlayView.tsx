@@ -1322,43 +1322,38 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
     const rightPlayer = gamePlayers[rightIndex];
 
     return (
-      <div className="min-h-screen bg-linear-to-b from-green-900 to-green-950 flex flex-col">
-        {/* Header */}
-        <header className="border-b border-green-800 bg-green-900/80 backdrop-blur-md">
-          <div className="container mx-auto px-4 py-2">
+      <div className="h-screen bg-linear-to-b from-green-900 to-green-950 flex flex-col overflow-hidden">
+        {/* Compact Header */}
+        <header className="shrink-0 border-b border-green-800 bg-green-900/80 backdrop-blur-md">
+          <div className="container mx-auto px-2 md:px-4 py-1.5 md:py-2">
             <div className="flex items-center justify-between">
               <Link
                 href="/lobby"
-                className="flex items-center gap-2 text-green-300 hover:text-white"
+                className="flex items-center gap-1 text-green-300 hover:text-white text-sm"
               >
-                <ArrowLeft className="w-5 h-5" />
-                <span className="hidden sm:inline">ออก</span>
+                <ArrowLeft className="w-4 h-4" />
               </Link>
 
               <button
                 onClick={copyRoomCode}
-                className="flex items-center gap-2 px-3 py-1 rounded bg-green-800 hover:bg-green-700"
+                className="flex items-center gap-1.5 px-2 py-1 rounded bg-green-800 hover:bg-green-700"
               >
-                <span className="text-green-300 text-sm">ห้อง:</span>
-                <span className="font-mono font-bold text-white">
+                <span className="font-mono font-bold text-white text-sm">
                   {roomCode}
                 </span>
                 <Copy
-                  className={`w-4 h-4 ${
+                  className={`w-3.5 h-3.5 ${
                     copied ? "text-green-400" : "text-green-500"
                   }`}
                 />
               </button>
 
-              <div className="flex items-center gap-2">
-                <Wifi className="w-4 h-4 text-green-400" />
-                <span className="text-green-400 text-sm">เชื่อมต่อแล้ว</span>
-              </div>
+              <Wifi className="w-4 h-4 text-green-400" />
             </div>
           </div>
         </header>
 
-        {/* Game State HUD */}
+        {/* Game State HUD - More compact on mobile */}
         <GameStateHUD
           currentPlayerName={currentTurnPlayer?.name ?? ""}
           currentPlayerAvatar={currentTurnPlayer?.avatar ?? ""}
@@ -1367,11 +1362,11 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
           roundNumber={roundNumber}
         />
 
-        {/* Game Area */}
-        <main className="flex-1 flex flex-col items-center justify-center p-4 relative">
-          {/* Top opponent */}
+        {/* Game Area - Fixed height with better mobile positioning */}
+        <main className="flex-1 relative min-h-0">
+          {/* Top opponent - positioned higher on mobile */}
           {topPlayer && (
-            <div className="absolute top-4">
+            <div className="absolute top-1 md:top-4 left-1/2 -translate-x-1/2">
               <OpponentHand
                 cardCount={topPlayer.hand.length}
                 playerName={topPlayer.name}
@@ -1384,9 +1379,9 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
             </div>
           )}
 
-          {/* Left opponent */}
+          {/* Left opponent - better positioning for mobile */}
           {leftPlayer && (
-            <div className="absolute left-4 top-1/2 -translate-y-1/2">
+            <div className="absolute left-1 md:left-4 top-[40%] md:top-1/2 -translate-y-1/2">
               <OpponentHand
                 cardCount={leftPlayer.hand.length}
                 playerName={leftPlayer.name}
@@ -1399,9 +1394,9 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
             </div>
           )}
 
-          {/* Right opponent */}
+          {/* Right opponent - better positioning for mobile */}
           {rightPlayer && (
-            <div className="absolute right-4 top-1/2 -translate-y-1/2">
+            <div className="absolute right-1 md:right-4 top-[40%] md:top-1/2 -translate-y-1/2">
               <OpponentHand
                 cardCount={rightPlayer.hand.length}
                 playerName={rightPlayer.name}
@@ -1414,8 +1409,8 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
             </div>
           )}
 
-          {/* Center play area - absolutely positioned in center */}
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
+          {/* Center play area - slightly higher on mobile to make room for hand */}
+          <div className="absolute top-[35%] md:top-[45%] left-1/2 -translate-x-1/2 -translate-y-1/2">
             <PlayArea
               currentHand={currentHand}
               discardPile={discardPile}
@@ -1427,8 +1422,8 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
             />
           </div>
 
-          {/* My hand - positioned at bottom center */}
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex flex-col items-center">
+          {/* My hand - positioned at bottom with controls */}
+          <div className="absolute bottom-0 left-0 right-0 pb-2 md:pb-4 px-2 flex flex-col items-center">
             <PlayerHand
               cards={myHand}
               selectedCards={selectedCards}
@@ -1437,8 +1432,8 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
               disabled={!isMyTurn}
             />
 
-            {/* Controls */}
-            <div className="mt-4 flex justify-center">
+            {/* Controls - compact on mobile */}
+            <div className="mt-2 md:mt-4 flex justify-center">
               <GameControls
                 onPlay={handlePlay}
                 onPass={handlePass}
@@ -1607,80 +1602,69 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
 
   // Waiting room (default)
   return (
-    <div className="min-h-screen bg-linear-to-b from-gray-900 to-gray-950">
-      {/* Header */}
-      <header className="border-b border-gray-800 bg-gray-900/80 backdrop-blur-md">
-        <div className="container mx-auto px-4 py-3">
+    <div className="h-screen bg-linear-to-b from-gray-900 to-gray-950 flex flex-col overflow-hidden">
+      {/* Compact Header */}
+      <header className="shrink-0 border-b border-gray-800 bg-gray-900/80 backdrop-blur-md">
+        <div className="container mx-auto px-4 py-2">
           <div className="flex items-center justify-between">
             <Link
               href="/lobby"
-              className="flex items-center gap-2 text-gray-400 hover:text-white"
+              className="flex items-center gap-1.5 text-gray-400 hover:text-white text-sm"
             >
-              <ArrowLeft className="w-5 h-5" />
-              <span className="hidden sm:inline">ออกจากห้อง</span>
+              <ArrowLeft className="w-4 h-4" />
+              <span className="hidden sm:inline">ออก</span>
             </Link>
 
             <button
               onClick={copyRoomCode}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-800 hover:bg-gray-700"
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700"
             >
-              <span className="text-gray-400 text-sm">ห้อง:</span>
+              <span className="text-gray-400 text-xs">ห้อง:</span>
               <span className="font-mono font-bold text-white tracking-wider">
                 {roomCode}
               </span>
               <Copy
-                className={`w-4 h-4 ${
+                className={`w-3.5 h-3.5 ${
                   copied ? "text-green-400" : "text-gray-500"
                 }`}
               />
             </button>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               {connectionStatus === "connecting" && (
-                <>
-                  <Loader2 className="w-4 h-4 text-yellow-400 animate-spin" />
-                  <span className="text-yellow-400 text-sm">
-                    กำลังเชื่อมต่อ
-                  </span>
-                </>
+                <Loader2 className="w-4 h-4 text-yellow-400 animate-spin" />
               )}
               {connectionStatus === "connected" && (
-                <>
-                  <Wifi className="w-4 h-4 text-green-400" />
-                  <span className="text-green-400 text-sm">เชื่อมต่อแล้ว</span>
-                </>
+                <Wifi className="w-4 h-4 text-green-400" />
               )}
               {connectionStatus === "error" && (
-                <>
-                  <WifiOff className="w-4 h-4 text-red-400" />
-                  <span className="text-red-400 text-sm">เชื่อมต่อไม่ได้</span>
-                </>
+                <WifiOff className="w-4 h-4 text-red-400" />
               )}
             </div>
           </div>
         </div>
       </header>
 
-      {/* Waiting room content */}
-      <main className="container mx-auto px-4 py-8">
-        <div className="max-w-2xl mx-auto">
-          <div className="text-center mb-8">
-            <h1 className="text-2xl font-bold text-white mb-2">
-              {isHost ? "ห้องของคุณ" : "เข้าร่วมห้อง"}
-            </h1>
-            <p className="text-gray-400">
-              รอผู้เล่นเข้าร่วม ({players.length}/4)
-            </p>
+      {/* Main Content - Flex grow to fill remaining space */}
+      <main className="flex-1 container mx-auto px-4 py-3 flex flex-col max-w-3xl">
+        {/* Title */}
+        <div className="text-center mb-3">
+          <h1 className="text-xl font-bold text-white">
+            {isHost ? "ห้องของคุณ" : "เข้าร่วมห้อง"}{" "}
+            <span className="text-gray-500">({players.length}/4)</span>
+          </h1>
+        </div>
+
+        {peerError && (
+          <div className="mb-3 p-2 bg-red-900/30 border border-red-800 rounded-lg">
+            <p className="text-red-400 text-center text-sm">{peerError}</p>
           </div>
+        )}
 
-          {peerError && (
-            <div className="mb-6 p-4 bg-red-900/30 border border-red-800 rounded-xl">
-              <p className="text-red-400 text-center">{peerError}</p>
-            </div>
-          )}
-
-          {/* Players grid */}
-          <div className="grid grid-cols-2 gap-4 mb-8">
+        {/* Two Column Layout */}
+        <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 min-h-0">
+          {/* Left: Players Grid */}
+          <div className="grid grid-cols-2 gap-2 content-start">
             {[0, 1, 2, 3].map((index) => {
               const player = players[index];
               const isMe = player?.id === user?.id;
@@ -1690,45 +1674,32 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
                   <div
                     key={player.id}
                     className={cn(
-                      "bg-gray-800 rounded-xl p-6 text-center relative",
+                      "bg-gray-800 rounded-lg p-3 text-center relative",
                       player.isHost && "ring-2 ring-yellow-500",
                       isMe && !player.isHost && "ring-2 ring-blue-500"
                     )}
                   >
-                    {/* Host badge */}
                     {player.isHost && (
-                      <div className="absolute -top-2 -right-2 bg-yellow-500 text-yellow-900 text-xs font-bold px-2 py-1 rounded-full">
+                      <div className="absolute -top-1.5 -right-1.5 bg-yellow-500 text-yellow-900 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
                         HOST
                       </div>
                     )}
-                    {/* "You" badge */}
                     {isMe && (
-                      <div
-                        className={cn(
-                          "absolute -top-2 -left-2 text-xs font-bold px-2 py-1 rounded-full",
-                          player.isHost
-                            ? "bg-blue-500 text-white"
-                            : "bg-blue-500 text-white"
-                        )}
-                      >
+                      <div className="absolute -top-1.5 -left-1.5 bg-blue-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
                         คุณ
                       </div>
                     )}
-                    <div className="text-5xl mb-3">{player.avatar}</div>
-                    <div className="font-medium text-white mb-1">
+                    <div className="text-3xl mb-1">{player.avatar}</div>
+                    <div className="font-medium text-white text-sm truncate">
                       {player.name}
-                      {isMe && (
-                        <span className="text-blue-400 text-sm ml-1">
-                          (คุณ)
-                        </span>
-                      )}
                     </div>
-                    <div className="flex items-center justify-center gap-2">
-                      <span className="text-sm text-green-400">ออนไลน์</span>
-                      {player.isReady && (
-                        <span className="bg-green-500 text-white text-xs px-2 py-0.5 rounded-full">
-                          พร้อม
+                    <div className="flex items-center justify-center gap-1 mt-1">
+                      {player.isReady ? (
+                        <span className="bg-green-500 text-white text-[10px] px-1.5 py-0.5 rounded-full">
+                          พร้อม ✓
                         </span>
+                      ) : (
+                        <span className="text-[10px] text-gray-500">รอ...</span>
                       )}
                     </div>
                   </div>
@@ -1738,165 +1709,162 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
               return (
                 <div
                   key={index}
-                  className="bg-gray-800/50 rounded-xl p-6 text-center border-2 border-dashed border-gray-700"
+                  className="bg-gray-800/30 rounded-lg p-3 text-center border border-dashed border-gray-700"
                 >
-                  <div className="text-5xl mb-3 opacity-30">👤</div>
-                  <div className="text-gray-500 font-medium mb-1">
-                    รอผู้เล่น...
-                  </div>
-                  <div className="text-sm text-gray-600">ว่าง</div>
+                  <div className="text-3xl mb-1 opacity-20">👤</div>
+                  <div className="text-gray-600 text-sm">ว่าง</div>
                 </div>
               );
             })}
           </div>
 
-          {/* Share room code */}
-          <div className="bg-gray-800 rounded-xl p-6 mb-6">
-            <div className="flex items-center gap-3 mb-4">
-              <Users className="w-5 h-5 text-blue-400" />
-              <h2 className="font-medium text-white">เชิญเพื่อนเข้าร่วม</h2>
-            </div>
-            <p className="text-gray-400 text-sm mb-4">
-              แชร์รหัสห้องนี้ให้เพื่อนเพื่อเข้าร่วมเกม
-            </p>
-            <div className="flex gap-2">
-              <div className="flex-1 bg-gray-900 rounded-lg px-4 py-3 text-center">
-                <span className="text-2xl font-mono font-bold text-white tracking-widest">
-                  {roomCode}
+          {/* Right: Settings & Actions */}
+          <div className="flex flex-col gap-3">
+            {/* Share Room Code - Compact */}
+            <div className="bg-gray-800 rounded-lg p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <Users className="w-4 h-4 text-blue-400" />
+                <span className="font-medium text-white text-sm">
+                  เชิญเพื่อน
                 </span>
               </div>
-              <button
-                onClick={copyRoomCode}
-                className={cn(
-                  "px-4 rounded-lg transition-colors",
-                  copied
-                    ? "bg-green-500 text-white"
-                    : "bg-gray-700 hover:bg-gray-600 text-gray-300"
-                )}
-              >
-                <Copy className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
-
-          {/* AI Mode Toggle (Host Only) */}
-          {isHost && (
-            <div className="bg-gray-800 rounded-xl p-6 mb-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <Bot className="w-5 h-5 text-purple-400" />
-                  <h2 className="font-medium text-white">โหมดเล่นกับ AI</h2>
+              <div className="flex gap-2">
+                <div className="flex-1 bg-gray-900 rounded px-3 py-2 text-center">
+                  <span className="text-lg font-mono font-bold text-white tracking-widest">
+                    {roomCode}
+                  </span>
                 </div>
                 <button
-                  onClick={() => setAiModeEnabled(!aiModeEnabled)}
+                  onClick={copyRoomCode}
                   className={cn(
-                    "relative inline-flex h-6 w-11 items-center rounded-full transition-colors",
-                    aiModeEnabled ? "bg-purple-500" : "bg-gray-600"
+                    "px-3 rounded transition-colors",
+                    copied
+                      ? "bg-green-500 text-white"
+                      : "bg-gray-700 hover:bg-gray-600 text-gray-300"
                   )}
                 >
-                  <span
-                    className={cn(
-                      "inline-block h-4 w-4 transform rounded-full bg-white transition-transform",
-                      aiModeEnabled ? "translate-x-6" : "translate-x-1"
-                    )}
-                  />
+                  <Copy className="w-4 h-4" />
                 </button>
               </div>
+            </div>
 
-              {aiModeEnabled && (
-                <>
-                  <p className="text-gray-400 text-sm mb-4">
-                    เปิดใช้งาน AI เพื่อเติมผู้เล่นที่ขาด (ต้องการ 4 คน, มี{" "}
-                    {players.length} คน, AI จะเติม {4 - players.length} คน)
-                  </p>
-
-                  {/* AI Difficulty Selector */}
-                  <div className="space-y-2">
-                    <label className="text-sm text-gray-400">
-                      ระดับความยาก:
-                    </label>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => setAiDifficulty("easy")}
-                        className={cn(
-                          "flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors",
-                          aiDifficulty === "easy"
-                            ? "bg-green-500 text-white"
-                            : "bg-gray-700 text-gray-300 hover:bg-gray-600"
-                        )}
-                      >
-                        ง่าย
-                      </button>
-                      <button
-                        onClick={() => setAiDifficulty("medium")}
-                        className={cn(
-                          "flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors",
-                          aiDifficulty === "medium"
-                            ? "bg-yellow-500 text-white"
-                            : "bg-gray-700 text-gray-300 hover:bg-gray-600"
-                        )}
-                      >
-                        ปานกลาง
-                      </button>
-                      <button
-                        onClick={() => setAiDifficulty("hard")}
-                        className={cn(
-                          "flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors",
-                          aiDifficulty === "hard"
-                            ? "bg-red-500 text-white"
-                            : "bg-gray-700 text-gray-300 hover:bg-gray-600"
-                        )}
-                      >
-                        ยาก
-                      </button>
-                    </div>
+            {/* AI Mode Toggle - Compact (Host Only) */}
+            {isHost && (
+              <div className="bg-gray-800 rounded-lg p-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Bot className="w-4 h-4 text-purple-400" />
+                    <span className="font-medium text-white text-sm">
+                      เล่นกับ AI
+                    </span>
+                    {aiModeEnabled && (
+                      <span className="text-[10px] text-purple-300 bg-purple-500/20 px-1.5 py-0.5 rounded">
+                        +{4 - players.length} บอท
+                      </span>
+                    )}
                   </div>
-                </>
+                  <button
+                    onClick={() => setAiModeEnabled(!aiModeEnabled)}
+                    className={cn(
+                      "relative inline-flex h-5 w-9 items-center rounded-full transition-colors",
+                      aiModeEnabled ? "bg-purple-500" : "bg-gray-600"
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform",
+                        aiModeEnabled ? "translate-x-5" : "translate-x-1"
+                      )}
+                    />
+                  </button>
+                </div>
+
+                {aiModeEnabled && (
+                  <div className="flex gap-1.5 mt-3">
+                    <button
+                      onClick={() => setAiDifficulty("easy")}
+                      className={cn(
+                        "flex-1 py-1.5 px-2 rounded text-xs font-medium transition-colors",
+                        aiDifficulty === "easy"
+                          ? "bg-green-500 text-white"
+                          : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                      )}
+                    >
+                      ง่าย
+                    </button>
+                    <button
+                      onClick={() => setAiDifficulty("medium")}
+                      className={cn(
+                        "flex-1 py-1.5 px-2 rounded text-xs font-medium transition-colors",
+                        aiDifficulty === "medium"
+                          ? "bg-yellow-500 text-white"
+                          : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                      )}
+                    >
+                      ปานกลาง
+                    </button>
+                    <button
+                      onClick={() => setAiDifficulty("hard")}
+                      className={cn(
+                        "flex-1 py-1.5 px-2 rounded text-xs font-medium transition-colors",
+                        aiDifficulty === "hard"
+                          ? "bg-red-500 text-white"
+                          : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                      )}
+                    >
+                      ยาก
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Spacer */}
+            <div className="flex-1" />
+
+            {/* Action Buttons */}
+            <div className="space-y-2">
+              {/* Ready button */}
+              <button
+                onClick={toggleReady}
+                className={cn(
+                  "w-full py-3 rounded-lg font-semibold transition-all",
+                  players.find((p) => p.id === user.id)?.isReady
+                    ? "bg-green-600 hover:bg-green-700 text-white"
+                    : "bg-gray-700 hover:bg-gray-600 text-white"
+                )}
+              >
+                {players.find((p) => p.id === user.id)?.isReady
+                  ? "✓ พร้อมแล้ว"
+                  : "กดเพื่อพร้อม"}
+              </button>
+
+              {/* Start game button (host only) */}
+              {isHost && (
+                <button
+                  onClick={handleStartGame}
+                  disabled={!canStartGame}
+                  className="w-full py-3 rounded-lg bg-linear-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {!canStartGame
+                    ? aiModeEnabled
+                      ? `รอผู้เล่นพร้อม (${
+                          players.filter((p) => p.isReady).length
+                        }/${players.length})`
+                      : `รอครบ 4 คน (${players.length}/4)`
+                    : aiModeEnabled && players.length < 4
+                    ? `เริ่มเกม! 🤖`
+                    : "เริ่มเกม!"}
+                </button>
+              )}
+
+              {!isHost && allPlayersReady && (
+                <p className="text-center text-gray-500 text-sm">
+                  รอเจ้าของห้องเริ่มเกม...
+                </p>
               )}
             </div>
-          )}
-
-          {/* Ready button */}
-          <button
-            onClick={toggleReady}
-            className={cn(
-              "w-full py-4 rounded-xl font-semibold text-lg transition-all mb-4",
-              players.find((p) => p.id === user.id)?.isReady
-                ? "bg-green-600 hover:bg-green-700 text-white"
-                : "bg-gray-700 hover:bg-gray-600 text-white"
-            )}
-          >
-            {players.find((p) => p.id === user.id)?.isReady
-              ? "✓ พร้อมแล้ว"
-              : "กดเพื่อพร้อม"}
-          </button>
-
-          {/* Start game button (host only) */}
-          {isHost && (
-            <button
-              onClick={handleStartGame}
-              disabled={!canStartGame}
-              className="w-full py-4 rounded-xl bg-linear-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-semibold text-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {!canStartGame
-                ? aiModeEnabled
-                  ? `รอผู้เล่นพร้อม (${
-                      players.filter((p) => p.isReady).length
-                    }/${players.length})`
-                  : `รอผู้เล่นครบ 4 คน (${
-                      players.filter((p) => p.isReady).length
-                    }/${players.length})`
-                : aiModeEnabled && players.length < 4
-                ? `เริ่มเกมกับ AI (${4 - players.length} บอท)`
-                : "เริ่มเกม!"}
-            </button>
-          )}
-
-          {!isHost && allPlayersReady && (
-            <div className="text-center text-gray-400">
-              <p>รอเจ้าของห้องเริ่มเกม...</p>
-            </div>
-          )}
+          </div>
         </div>
       </main>
 

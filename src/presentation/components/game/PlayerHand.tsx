@@ -25,21 +25,31 @@ export function PlayerHand({
   const isCardSelected = (card: Card) =>
     selectedCards.some((c) => c.id === card.id);
 
+  // Calculate overlap based on card count - more cards = more overlap
+  const getOverlap = () => {
+    if (cards.length <= 5) return { mobile: -20, desktop: -32 };
+    if (cards.length <= 8) return { mobile: -24, desktop: -36 };
+    if (cards.length <= 10) return { mobile: -28, desktop: -40 };
+    return { mobile: -32, desktop: -44 };
+  };
+
+  const overlap = getOverlap();
+
   return (
-    <div className="relative">
+    <div className="relative w-full max-w-[95vw] md:max-w-none">
       {/* Turn indicator */}
       {isCurrentTurn && (
-        <div className="absolute -top-8 left-1/2 -translate-x-1/2 px-3 py-1 bg-yellow-500 text-yellow-900 rounded-full text-sm font-bold animate-pulse">
+        <div className="absolute -top-6 md:-top-8 left-1/2 -translate-x-1/2 px-2 md:px-3 py-0.5 md:py-1 bg-yellow-500 text-yellow-900 rounded-full text-xs md:text-sm font-bold animate-pulse whitespace-nowrap">
           ตาของคุณ!
         </div>
       )}
 
-      {/* Cards */}
+      {/* Cards - scrollable on mobile if too many */}
       <div
         className={cn(
-          "flex justify-center items-end",
+          "flex justify-center items-end overflow-x-auto pb-2",
           "transition-all duration-300",
-          isCurrentTurn && "scale-105"
+          isCurrentTurn && "md:scale-105"
         )}
       >
         {cards.map((card, index) => {
@@ -47,32 +57,44 @@ export function PlayerHand({
           const totalCards = cards.length;
           const middleIndex = (totalCards - 1) / 2;
           const offset = index - middleIndex;
-          const rotation = offset * 2; // 2 degrees per card from center
+          const rotation = offset * 1.5; // Reduced rotation for mobile
 
           return (
             <div
               key={card.id}
-              className="transition-all duration-150"
+              className="transition-all duration-150 shrink-0"
               style={{
-                marginLeft: index === 0 ? 0 : "-32px",
+                marginLeft: index === 0 ? 0 : `${overlap.mobile}px`,
                 transform: `rotate(${rotation}deg)`,
                 zIndex: index,
               }}
             >
-              <CardComponent
-                card={card}
-                isSelected={isCardSelected(card)}
-                isPlayable={isCurrentTurn && !disabled}
-                onClick={() => !disabled && onCardSelect(card)}
-                size="md"
-              />
+              {/* Responsive card size */}
+              <div className="block md:hidden">
+                <CardComponent
+                  card={card}
+                  isSelected={isCardSelected(card)}
+                  isPlayable={isCurrentTurn && !disabled}
+                  onClick={() => !disabled && onCardSelect(card)}
+                  size="sm"
+                />
+              </div>
+              <div className="hidden md:block">
+                <CardComponent
+                  card={card}
+                  isSelected={isCardSelected(card)}
+                  isPlayable={isCurrentTurn && !disabled}
+                  onClick={() => !disabled && onCardSelect(card)}
+                  size="md"
+                />
+              </div>
             </div>
           );
         })}
       </div>
 
-      {/* Card count */}
-      <div className="text-center mt-2 text-gray-400 text-sm">
+      {/* Card count - smaller on mobile */}
+      <div className="text-center mt-1 text-gray-400 text-xs md:text-sm">
         {cards.length} ใบ
       </div>
     </div>
@@ -121,9 +143,9 @@ export function OpponentHand({
   finishOrder,
   position,
 }: OpponentHandProps) {
-  // Layout based on position
+  // Layout based on position - more compact on mobile
   const containerClass = cn(
-    "flex items-center gap-3",
+    "flex items-center gap-1 md:gap-2",
     position === "top" && "flex-col",
     position === "left" && "flex-row",
     position === "right" && "flex-row-reverse"
@@ -135,69 +157,68 @@ export function OpponentHand({
     (position === "left" || position === "right") && "flex-col"
   );
 
-  // Show fewer card backs with count indicator
-  const displayCount = Math.min(cardCount, 5);
+  // Show fewer card backs on mobile
+  const displayCount = Math.min(cardCount, 3);
 
   return (
     <div className={containerClass}>
-      {/* Player info */}
+      {/* Player info - compact on mobile */}
       <div
         className={cn(
-          "flex flex-col items-center gap-1 p-2 rounded-lg",
-          isCurrentTurn && "bg-yellow-500/20 ring-2 ring-yellow-500"
+          "flex flex-col items-center gap-0.5 p-1 md:p-2 rounded-lg",
+          isCurrentTurn && "bg-yellow-500/20 ring-1 md:ring-2 ring-yellow-500"
         )}
       >
-        <div className="text-3xl">{avatar}</div>
-        <div className="text-white text-sm font-medium text-center truncate max-w-20">
+        <div className="text-xl md:text-2xl">{avatar}</div>
+        <div className="text-white text-[10px] md:text-xs font-medium text-center truncate max-w-14 md:max-w-20">
           {playerName}
         </div>
         {hasPassed && cardCount > 0 && (
-          <div className="text-red-400 text-xs font-medium">ผ่าน</div>
+          <div className="text-red-400 text-[10px] font-medium">ผ่าน</div>
         )}
         {cardCount === 0 && finishOrder && (
           <div
             className={cn(
-              "text-xs font-bold flex items-center gap-1",
+              "text-[10px] font-bold flex items-center gap-0.5",
               getRankDisplay(finishOrder).color
             )}
           >
             <span>{getRankDisplay(finishOrder).emoji}</span>
-            <span>{getRankDisplay(finishOrder).name}</span>
           </div>
         )}
       </div>
 
-      {/* Cards */}
+      {/* Cards - smaller on mobile */}
       {cardCount > 0 && (
         <div className={cardsContainerClass}>
           {Array.from({ length: displayCount }).map((_, i) => (
             <div
               key={i}
               className={cn(
-                position === "top" && "-ml-6 first:ml-0",
+                position === "top" && "-ml-4 md:-ml-6 first:ml-0",
                 (position === "left" || position === "right") &&
-                  "-mt-10 first:mt-0"
+                  "-mt-6 md:-mt-8 first:mt-0"
               )}
               style={{ zIndex: i }}
             >
               <div
                 className={cn(
-                  "w-8 h-12 rounded bg-linear-to-br from-red-700 to-red-900 border border-red-800",
+                  "w-5 h-7 md:w-7 md:h-10 rounded bg-linear-to-br from-red-700 to-red-900 border border-red-800",
                   "flex items-center justify-center shadow",
                   position === "left" && "rotate-90",
                   position === "right" && "-rotate-90"
                 )}
               >
-                <span className="text-red-400 text-xs">♠</span>
+                <span className="text-red-400 text-[8px] md:text-xs">♠</span>
               </div>
             </div>
           ))}
           {/* Card count badge */}
           <div
             className={cn(
-              "bg-gray-800 text-white text-xs font-bold px-2 py-1 rounded-full",
-              position === "top" && "-ml-2",
-              (position === "left" || position === "right") && "-mt-2"
+              "bg-gray-800 text-white text-[10px] md:text-xs font-bold px-1.5 py-0.5 md:px-2 md:py-1 rounded-full",
+              position === "top" && "-ml-1",
+              (position === "left" || position === "right") && "-mt-1"
             )}
           >
             {cardCount}

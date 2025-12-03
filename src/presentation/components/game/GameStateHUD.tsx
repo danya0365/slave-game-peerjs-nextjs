@@ -138,53 +138,58 @@ export function GameStateHUD({
   };
 
   return (
-    <div className={cn("fixed top-20 left-4 z-40", className)}>
-      {/* Current Turn Indicator */}
+    <div
+      className={cn(
+        "absolute top-12 md:top-16 left-2 md:left-4 z-40",
+        className
+      )}
+    >
+      {/* Current Turn Indicator - Compact on mobile */}
       <div
         className={cn(
-          "rounded-xl p-3 mb-2 backdrop-blur-md shadow-lg transition-all",
+          "rounded-lg md:rounded-xl p-2 md:p-3 mb-1.5 md:mb-2 backdrop-blur-md shadow-lg transition-all",
           isMyTurn
             ? "bg-yellow-500/90 text-yellow-900 animate-pulse"
             : "bg-gray-900/80 text-white"
         )}
       >
-        <div className="flex items-center gap-2">
-          <User className="w-4 h-4" />
-          <span className="text-sm font-medium">
-            {isMyTurn ? "ตาคุณ!" : `ตาของ ${currentPlayerName}`}
+        <div className="flex items-center gap-1.5 md:gap-2">
+          <User className="w-3 h-3 md:w-4 md:h-4" />
+          <span className="text-xs md:text-sm font-medium">
+            {isMyTurn ? "ตาคุณ!" : currentPlayerName}
           </span>
         </div>
-        <div className="flex items-center gap-2 mt-1">
-          <span className="text-2xl">{currentPlayerAvatar}</span>
-          <div>
-            <div className="text-xs opacity-80">รอบที่ {roundNumber}</div>
+        <div className="flex items-center gap-1.5 mt-0.5 md:mt-1">
+          <span className="text-lg md:text-2xl">{currentPlayerAvatar}</span>
+          <div className="text-[10px] md:text-xs opacity-80">
+            รอบ {roundNumber}
           </div>
         </div>
       </div>
 
-      {/* History Toggle Button */}
+      {/* History Toggle Button - Smaller on mobile */}
       <button
         onClick={() => setIsHistoryOpen(!isHistoryOpen)}
-        className="flex items-center gap-2 px-3 py-2 rounded-xl bg-gray-900/80 backdrop-blur-md text-white hover:bg-gray-800/80 transition-colors w-full"
+        className="flex items-center gap-1.5 px-2 md:px-3 py-1.5 md:py-2 rounded-lg md:rounded-xl bg-gray-900/80 backdrop-blur-md text-white hover:bg-gray-800/80 transition-colors w-full"
       >
-        <History className="w-4 h-4" />
-        <span className="text-sm">ประวัติ ({actions.length})</span>
+        <History className="w-3 h-3 md:w-4 md:h-4" />
+        <span className="text-xs md:text-sm">ประวัติ ({actions.length})</span>
         {isHistoryOpen ? (
-          <ChevronUp className="w-4 h-4 ml-auto" />
+          <ChevronUp className="w-3 h-3 md:w-4 md:h-4 ml-auto" />
         ) : (
-          <ChevronDown className="w-4 h-4 ml-auto" />
+          <ChevronDown className="w-3 h-3 md:w-4 md:h-4 ml-auto" />
         )}
       </button>
 
-      {/* History Panel */}
+      {/* History Panel - Smaller on mobile */}
       {isHistoryOpen && (
-        <div className="mt-2 rounded-xl bg-gray-900/90 backdrop-blur-md p-3 max-h-60 overflow-y-auto shadow-lg">
+        <div className="mt-1.5 md:mt-2 rounded-lg md:rounded-xl bg-gray-900/90 backdrop-blur-md p-2 md:p-3 max-h-40 md:max-h-60 overflow-y-auto shadow-lg">
           {actions.length === 0 ? (
-            <p className="text-gray-400 text-sm text-center py-2">
+            <p className="text-gray-400 text-xs md:text-sm text-center py-1.5 md:py-2">
               ยังไม่มีการเล่น
             </p>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-1 md:space-y-2">
               {actions
                 .slice()
                 .reverse()
@@ -193,19 +198,24 @@ export function GameStateHUD({
                   <div
                     key={action.id}
                     className={cn(
-                      "flex items-center gap-2 p-2 rounded-lg text-sm",
+                      "flex items-center gap-1.5 p-1.5 md:p-2 rounded text-xs md:text-sm",
                       index === 0
                         ? "bg-gray-700/50"
                         : "bg-transparent opacity-70"
                     )}
                   >
-                    <span className="text-lg">{action.playerAvatar}</span>
+                    <span className="text-sm md:text-lg">
+                      {action.playerAvatar}
+                    </span>
                     <div className="flex-1 min-w-0">
-                      <div className="font-medium text-white truncate">
+                      <div className="font-medium text-white truncate text-[10px] md:text-xs">
                         {action.playerName}
                       </div>
                       <div
-                        className={cn("text-xs", getActionColor(action.action))}
+                        className={cn(
+                          "text-[10px] md:text-xs",
+                          getActionColor(action.action)
+                        )}
                       >
                         {getActionText(action)}
                       </div>

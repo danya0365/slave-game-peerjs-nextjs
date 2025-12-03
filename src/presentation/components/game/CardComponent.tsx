@@ -9,7 +9,7 @@ interface CardComponentProps {
   isSelected?: boolean;
   isPlayable?: boolean;
   isHidden?: boolean;
-  size?: "sm" | "md" | "lg";
+  size?: "xs" | "sm" | "md" | "lg";
   onClick?: () => void;
 }
 
@@ -28,6 +28,7 @@ export function CardComponent({
   const rankInfo = RANK_DISPLAY[card.rank];
 
   const sizeClasses = {
+    xs: "w-8 h-11 text-[10px]",
     sm: "w-10 h-14 text-xs",
     md: "w-14 h-20 text-sm",
     lg: "w-20 h-28 text-base",
@@ -76,12 +77,22 @@ export function CardComponent({
         <span className={cn("font-bold", suitInfo.color)}>
           {rankInfo.display}
         </span>
-        <span className={cn("text-lg", suitInfo.color)}>{suitInfo.symbol}</span>
+        <span
+          className={cn(suitInfo.color, size === "xs" ? "text-sm" : "text-lg")}
+        >
+          {suitInfo.symbol}
+        </span>
       </div>
 
       {/* Center suit */}
       <div
-        className={cn("text-2xl", suitInfo.color, size === "lg" && "text-4xl")}
+        className={cn(
+          suitInfo.color,
+          size === "xs" && "text-lg",
+          size === "sm" && "text-xl",
+          size === "md" && "text-2xl",
+          size === "lg" && "text-4xl"
+        )}
       >
         {suitInfo.symbol}
       </div>
@@ -91,7 +102,11 @@ export function CardComponent({
         <span className={cn("font-bold", suitInfo.color)}>
           {rankInfo.display}
         </span>
-        <span className={cn("text-lg", suitInfo.color)}>{suitInfo.symbol}</span>
+        <span
+          className={cn(suitInfo.color, size === "xs" ? "text-sm" : "text-lg")}
+        >
+          {suitInfo.symbol}
+        </span>
       </div>
 
       {/* Selection indicator */}
