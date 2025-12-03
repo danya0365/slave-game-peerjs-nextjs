@@ -110,13 +110,21 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
   // Sound effects
   const {
     enabled: soundEnabled,
+    bgmPlaying,
     toggleSound,
+    toggleBgm,
+    startBgm,
+    startGameBgm,
+    stopBgm,
     playCardPlay,
     playCardSelect,
     playPass,
     playTurnStart,
     playWin,
     playGameStart,
+    playPlayerJoin,
+    playPlayerReady,
+    playClick,
   } = useSound();
 
   // Local state
@@ -228,6 +236,33 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
       playWin();
     }
   }, [gamePlayers, myPlayerId, gameStarted, playWin]);
+
+  // Play sound when player joins waiting room
+  const prevPlayerCount = useRef(0);
+  useEffect(() => {
+    if (gameStarted) return; // Only in waiting room
+    if (
+      players.length > prevPlayerCount.current &&
+      prevPlayerCount.current > 0
+    ) {
+      playPlayerJoin();
+    }
+    prevPlayerCount.current = players.length;
+  }, [players.length, gameStarted, playPlayerJoin]);
+
+  // Switch BGM based on game state
+  useEffect(() => {
+    if (!gameStarted && players.length > 0) {
+      // In waiting room with players - start waiting BGM
+      startBgm("waiting");
+    } else if (gameStarted) {
+      // Game started - switch to game BGM
+      startGameBgm();
+    }
+    return () => {
+      stopBgm();
+    };
+  }, [gameStarted, players.length, startBgm, startGameBgm, stopBgm]);
 
   // Initialize P2P connection
   useEffect(() => {
@@ -1062,6 +1097,7 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
   const toggleReady = () => {
     const currentPlayer = players.find((p) => p.id === user?.id);
     if (currentPlayer) {
+      playPlayerReady(); // Play ready sound
       setReady(!currentPlayer.isReady);
     }
   };
@@ -1700,7 +1736,35 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
               />
             </button>
 
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-2">
+              {/* Sound toggle */}
+              <button
+                onClick={toggleSound}
+                className="p-1 rounded hover:bg-gray-800 transition-colors"
+                title={soundEnabled ? "ปิดเสียง" : "เปิดเสียง"}
+              >
+                {soundEnabled ? (
+                  <Volume2 className="w-4 h-4 text-gray-400" />
+                ) : (
+                  <VolumeX className="w-4 h-4 text-gray-600" />
+                )}
+              </button>
+              {/* BGM toggle */}
+              <button
+                onClick={() => {
+                  playClick();
+                  toggleBgm();
+                }}
+                className={`px-2 py-0.5 rounded text-xs font-medium transition-colors ${
+                  bgmPlaying
+                    ? "bg-purple-600 text-white"
+                    : "bg-gray-700 text-gray-400 hover:bg-gray-600"
+                }`}
+                title={bgmPlaying ? "ปิด BGM" : "เปิด BGM"}
+              >
+                🎵
+              </button>
+              {/* Connection status */}
               {connectionStatus === "connecting" && (
                 <Loader2 className="w-4 h-4 text-yellow-400 animate-spin" />
               )}
