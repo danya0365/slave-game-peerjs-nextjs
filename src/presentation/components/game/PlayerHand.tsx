@@ -25,32 +25,36 @@ export function PlayerHand({
   const isCardSelected = (card: Card) =>
     selectedCards.some((c) => c.id === card.id);
 
-  // Calculate overlap based on card count - more cards = more overlap
+  // Calculate overlap - mobile needs more gap for readability
   const getOverlap = () => {
-    if (cards.length <= 5) return { mobile: -20, desktop: -32 };
-    if (cards.length <= 8) return { mobile: -24, desktop: -36 };
-    if (cards.length <= 10) return { mobile: -28, desktop: -40 };
-    return { mobile: -32, desktop: -44 };
+    // Mobile: sm card = 40px wide, show more of each card
+    // Desktop: md card = 56px wide, can overlap more
+    if (cards.length <= 5) return { mobile: -12, desktop: -32 };
+    if (cards.length <= 8) return { mobile: -14, desktop: -36 };
+    if (cards.length <= 10) return { mobile: -16, desktop: -40 };
+    return { mobile: -18, desktop: -44 }; // 22px visible per card
   };
 
   const overlap = getOverlap();
 
   return (
-    <div className="relative w-full max-w-[95vw] md:max-w-none overflow-visible">
+    <div className="relative w-full overflow-visible">
       {/* Turn indicator */}
       {isCurrentTurn && (
-        <div className="absolute -top-6 md:-top-8 left-1/2 -translate-x-1/2 px-2 md:px-3 py-0.5 md:py-1 bg-yellow-500 text-yellow-900 rounded-full text-xs md:text-sm font-bold animate-pulse whitespace-nowrap">
+        <div className="absolute -top-6 md:-top-8 left-1/2 -translate-x-1/2 px-2 md:px-3 py-0.5 md:py-1 bg-yellow-500 text-yellow-900 rounded-full text-xs md:text-sm font-bold animate-pulse whitespace-nowrap z-20">
           ตาของคุณ!
         </div>
       )}
 
-      {/* Cards - allow overflow for hover effect */}
+      {/* Cards container - centered with scroll on mobile when needed */}
       <div
         className={cn(
-          "flex justify-center items-end overflow-visible pb-2 pt-4",
+          "flex items-end justify-center pb-2 pt-4",
           "transition-all duration-300",
+          "overflow-x-auto md:overflow-visible",
           isCurrentTurn && "md:scale-105"
         )}
+        style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
       >
         {cards.map((card, index) => {
           // Calculate offset for fan effect

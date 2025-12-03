@@ -83,32 +83,6 @@ export function CardComponent({
           {suitInfo.symbol}
         </span>
       </div>
-
-      {/* Center suit */}
-      <div
-        className={cn(
-          suitInfo.color,
-          size === "xs" && "text-lg",
-          size === "sm" && "text-xl",
-          size === "md" && "text-2xl",
-          size === "lg" && "text-4xl"
-        )}
-      >
-        {suitInfo.symbol}
-      </div>
-
-      {/* Bottom right corner (rotated) */}
-      <div className="self-end flex flex-col items-center leading-none rotate-180">
-        <span className={cn("font-bold", suitInfo.color)}>
-          {rankInfo.display}
-        </span>
-        <span
-          className={cn(suitInfo.color, size === "xs" ? "text-sm" : "text-lg")}
-        >
-          {suitInfo.symbol}
-        </span>
-      </div>
-
       {/* Selection indicator */}
       {isSelected && (
         <div className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center">
