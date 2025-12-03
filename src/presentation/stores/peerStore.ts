@@ -712,6 +712,26 @@ export const usePeerStore = create<PeerStore>((set, get) => ({
         break;
       }
 
+      // Chat messages - forward to handler and relay to all
+      case "chat": {
+        const { onGameMessage, room, connections } = get();
+
+        // Forward to local handler
+        if (onGameMessage) {
+          onGameMessage(message);
+        }
+
+        // If host, relay to all OTHER clients
+        if (room?.isHost) {
+          connections.forEach((conn, connPeerId) => {
+            if (connPeerId !== fromPeerId && conn.open) {
+              conn.send(message);
+            }
+          });
+        }
+        break;
+      }
+
       // Ping/Pong for connection health
       case "ping": {
         // Respond with pong
@@ -764,7 +784,10 @@ export const usePeerStore = create<PeerStore>((set, get) => ({
       }
 
       default:
-        console.log("[PeerJS] Unknown message type:", message.type);
+        console.log(
+          "[PeerJS] Unknown message type:",
+          (message as { type: string }).type
+        );
     }
   },
 

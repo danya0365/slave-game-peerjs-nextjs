@@ -30,6 +30,7 @@ import {
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { ChatContainer, type ChatMessageData } from "./ChatPanel";
 import { ConnectionLostModal } from "./ConnectionStatus";
 import {
   DisconnectedPlayersBanner,
@@ -102,6 +103,7 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
   const [connectionTimeout, setConnectionTimeout] = useState(false);
   const [gameActions, setGameActions] = useState<GameAction[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [chatMessages, setChatMessages] = useState<ChatMessageData[]>([]);
 
   // Connection store
   const {
@@ -457,6 +459,22 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
           break;
         }
 
+        case "chat": {
+          const chatMsg =
+            message as import("@/src/domain/types/peer").ChatMessage;
+          setChatMessages((prev) => [
+            ...prev,
+            {
+              id: `${chatMsg.timestamp}-${chatMsg.senderId}`,
+              senderId: chatMsg.senderId,
+              playerName: chatMsg.playerName,
+              message: chatMsg.message,
+              timestamp: chatMsg.timestamp,
+            },
+          ]);
+          break;
+        }
+
         default:
           console.log("[GamePlayView] Unhandled game message:", message.type);
       }
@@ -745,6 +763,46 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
       }, 3000);
     }
   }, [isHost, peerId, myPlayerId]);
+
+  // Send chat message
+  const sendChatMessage = useCallback(
+    (message: string) => {
+      if (!user || !peerId) return;
+
+      const chatMessage = {
+        type: "chat" as const,
+        senderId: peerId,
+        timestamp: Date.now(),
+        message,
+        playerName: user.name,
+      };
+
+      // Add to own chat immediately
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          id: `${chatMessage.timestamp}-${chatMessage.senderId}`,
+          senderId: chatMessage.senderId,
+          playerName: chatMessage.playerName,
+          message: chatMessage.message,
+          timestamp: chatMessage.timestamp,
+        },
+      ]);
+
+      // Send to others
+      if (isHost) {
+        // Host broadcasts to all
+        broadcastToAll(chatMessage);
+      } else {
+        // Client sends to host (host will relay)
+        const hostConn = usePeerStore.getState().hostConnection;
+        if (hostConn?.open) {
+          hostConn.send(chatMessage);
+        }
+      }
+    },
+    [user, peerId, isHost, broadcastToAll]
+  );
 
   // Copy room code
   const copyRoomCode = async () => {
@@ -1535,10 +1593,17 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
 
       {/* Sync Button for clients (when game is playing) */}
       {!isHost && phase === "playing" && (
-        <div className="fixed bottom-4 right-4 z-40">
+        <div className="fixed bottom-4 right-20 z-40">
           <SyncButton onSync={requestSync} isSyncing={isSyncing} />
         </div>
       )}
+
+      {/* Chat Panel */}
+      <ChatContainer
+        messages={chatMessages}
+        onSendMessage={sendChatMessage}
+        currentPlayerName={user?.name ?? ""}
+      />
     </div>
   );
 }
