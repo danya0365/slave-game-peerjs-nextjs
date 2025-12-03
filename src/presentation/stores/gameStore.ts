@@ -439,11 +439,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
       nextIndex = (nextIndex + 1) % 4;
       attempts++;
 
-      // Skip players who have finished or passed this round
+      // Skip players who have finished OR passed this round
       const nextPlayer = players[nextIndex];
       const hasFinished = finishOrder.includes(nextPlayer.id);
+      const hasPassed = nextPlayer.hasPassed;
 
-      if (!hasFinished) {
+      // Only stop if player hasn't finished AND hasn't passed
+      if (!hasFinished && !hasPassed) {
         break;
       }
     } while (attempts < 4);
