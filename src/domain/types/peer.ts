@@ -40,6 +40,7 @@ export type MessageType =
   | "sync_players"
   | "sync_request"
   | "sync_game_state"
+  | "resume_game"
   | "player_disconnected"
   | "player_reconnected"
   | "kick_player"
@@ -81,6 +82,7 @@ export interface SyncPlayersMessage extends BaseMessage {
   type: "sync_players";
   players: PeerPlayer[];
   roomCode: string;
+  roomStatus?: "waiting" | "ready" | "playing" | "finished";
 }
 
 // Game start message (host broadcasts to all players)
@@ -168,6 +170,33 @@ export interface SyncGameStateMessage extends BaseMessage {
   players: PeerPlayer[];
 }
 
+// Resume game message (host sends to reconnecting player)
+export interface ResumeGameMessage extends BaseMessage {
+  type: "resume_game";
+  hand: Card[];
+  playerIndex: number;
+  gameState: {
+    phase: string;
+    currentPlayerIndex: number;
+    roundNumber: number;
+    finishOrder: string[];
+    lastPlayerId: string | null;
+    passCount: number;
+    isFirstTurn: boolean;
+    currentHand: PlayedHand | null;
+  };
+  discardPile: PlayedHand[];
+  allPlayers: {
+    id: string;
+    name: string;
+    avatar: string;
+    handCount: number;
+    hasPassed: boolean;
+    isCurrentTurn: boolean;
+    finishOrder?: number;
+  }[];
+}
+
 // Player disconnected notification
 export interface PlayerDisconnectedMessage extends BaseMessage {
   type: "player_disconnected";
@@ -207,6 +236,7 @@ export type PeerMessage =
   | PongMessage
   | SyncRequestMessage
   | SyncGameStateMessage
+  | ResumeGameMessage
   | PlayerDisconnectedMessage
   | PlayerReconnectedMessage
   | ErrorMessage;

@@ -5,6 +5,7 @@ import type {
   RoomState,
 } from "@/src/domain/types/peer";
 import { PEER_SERVER_CONFIG } from "@/src/infrastructure/config/peer.config";
+import { useGameStore } from "@/src/presentation/stores/gameStore";
 import Peer, { DataConnection } from "peerjs";
 import { create } from "zustand";
 
@@ -28,6 +29,11 @@ interface PeerState {
 
   // Game message callback (for game-related messages)
   onGameMessage: ((message: PeerMessage) => void) | null;
+
+  // Player reconnect callback (for host to send resume_game)
+  onPlayerReconnect:
+    | ((playerId: string, peerId: string, playerName: string) => void)
+    | null;
 }
 
 interface PeerActions {
@@ -36,6 +42,16 @@ interface PeerActions {
 
   // Set game message handler
   setOnGameMessage: (handler: ((message: PeerMessage) => void) | null) => void;
+
+  // Set player reconnect handler
+  setOnPlayerReconnect: (
+    handler:
+      | ((playerId: string, peerId: string, playerName: string) => void)
+      | null
+  ) => void;
+
+  // Set room status
+  setRoomStatus: (status: "waiting" | "ready" | "playing" | "finished") => void;
 
   // Host actions
   createRoom: (roomCode: string, player: PeerPlayer) => void;
@@ -85,10 +101,24 @@ export const usePeerStore = create<PeerStore>((set, get) => ({
   connections: new Map(),
   hostConnection: null,
   onGameMessage: null,
+  onPlayerReconnect: null,
 
   // Set game message handler
   setOnGameMessage: (handler) => {
     set({ onGameMessage: handler });
+  },
+
+  // Set player reconnect handler
+  setOnPlayerReconnect: (handler) => {
+    set({ onPlayerReconnect: handler });
+  },
+
+  // Set room status
+  setRoomStatus: (status) => {
+    const { room } = get();
+    if (room) {
+      set({ room: { ...room, status } });
+    }
   },
 
   // Initialize PeerJS instance
@@ -363,24 +393,151 @@ export const usePeerStore = create<PeerStore>((set, get) => ({
           message as import("@/src/domain/types/peer").PlayerJoinMessage;
         const newPlayer = joinMsg.player;
 
-        // Check if player already exists (prevent duplicates)
-        const playerExists = room.players.some(
-          (p) => p.id === newPlayer.id || p.peerId === newPlayer.peerId
+        // Check if player already exists by ID OR by name (could be reconnecting with new ID)
+        let existingPlayerIndex = room.players.findIndex(
+          (p) => p.id === newPlayer.id
         );
-        if (playerExists) {
-          console.log(
-            "[PeerJS] Player already exists, skipping:",
-            newPlayer.id
+
+        // If not found by ID, try matching by name (for reconnection after refresh)
+        if (existingPlayerIndex < 0) {
+          existingPlayerIndex = room.players.findIndex(
+            (p) => p.name === newPlayer.name
           );
-          // Still send sync to this player so they see current state
+        }
+
+        let existingPlayer =
+          existingPlayerIndex >= 0 ? room.players[existingPlayerIndex] : null;
+
+        // If not found in peerStore but game is playing, check gameStore
+        // (player might have been removed from peerStore on disconnect)
+        let foundInGameStore = false;
+        if (!existingPlayer && room.status === "playing") {
+          // Check gameStore for player
+          const gameStorePlayers = useGameStore.getState().players;
+          const gamePlayerIndex = gameStorePlayers.findIndex(
+            (p: { name: string }) => p.name === newPlayer.name
+          );
+
+          if (gamePlayerIndex >= 0) {
+            console.log(
+              "[PeerJS] Player found in gameStore but not peerStore:",
+              newPlayer.name
+            );
+            foundInGameStore = true;
+            existingPlayerIndex = gamePlayerIndex;
+            // Create existingPlayer from gameStore data
+            const gp = gameStorePlayers[gamePlayerIndex];
+            existingPlayer = {
+              peerId: "",
+              id: gp.id,
+              name: gp.name,
+              avatar: gp.avatar,
+              isHost: false,
+              isReady: true,
+              isConnected: false,
+            };
+          }
+        }
+
+        console.log("[PeerJS] player_join check:", {
+          existingPlayer: !!existingPlayer,
+          existingPlayerId: existingPlayer?.id,
+          newPlayerId: newPlayer.id,
+          newPlayerName: newPlayer.name,
+          roomStatus: room.status,
+          foundInGameStore,
+          roomPlayersCount: room.players.length,
+        });
+
+        // Handle reconnection during game
+        if (existingPlayer && room.status === "playing") {
+          console.log(
+            "[PeerJS] Player reconnecting during game:",
+            newPlayer.id,
+            "foundInGameStore:",
+            foundInGameStore
+          );
+
+          let updatedPlayers: PeerPlayer[];
+
+          if (foundInGameStore) {
+            // Player was removed from room.players but exists in gameStore
+            // Add them back to room.players
+            updatedPlayers = [
+              ...room.players,
+              {
+                ...existingPlayer,
+                id: newPlayer.id,
+                peerId: fromPeerId,
+                isConnected: true,
+              },
+            ];
+          } else {
+            // Player exists in room.players, just update their peerId
+            updatedPlayers = room.players.map((p, idx) =>
+              idx === existingPlayerIndex
+                ? {
+                    ...p,
+                    id: newPlayer.id,
+                    peerId: fromPeerId,
+                    isConnected: true,
+                  }
+                : p
+            );
+          }
+          get().updatePlayers(updatedPlayers);
+
+          // Notify via callback to send resume_game (use OLD player ID for gameStore lookup)
+          const { onPlayerReconnect } = get();
+          console.log(
+            "[PeerJS] onPlayerReconnect callback:",
+            !!onPlayerReconnect
+          );
+          if (onPlayerReconnect) {
+            // Pass the original player ID (from existingPlayer) since gameStore uses that
+            onPlayerReconnect(existingPlayer.id, fromPeerId, newPlayer.name);
+          } else {
+            console.warn("[PeerJS] No onPlayerReconnect callback set!");
+          }
+
+          // Broadcast player reconnected to all
+          connections.forEach((conn) => {
+            if (conn.open) {
+              conn.send({
+                type: "player_reconnected",
+                senderId: peerId,
+                timestamp: Date.now(),
+                playerId: newPlayer.id,
+                playerName: newPlayer.name,
+              } as PeerMessage);
+            }
+          });
+          return;
+        }
+
+        // Check if player already exists (prevent duplicates in waiting room)
+        if (existingPlayer) {
+          console.log(
+            "[PeerJS] Player already exists in waiting room, updating peerId:",
+            newPlayer.name
+          );
+          // Update their peerId (and ID if changed) and send sync
+          const updatedPlayers = room.players.map((p, idx) =>
+            idx === existingPlayerIndex
+              ? { ...p, id: newPlayer.id, peerId: fromPeerId }
+              : p
+          );
+          get().updatePlayers(updatedPlayers);
+
           const conn = connections.get(fromPeerId);
           if (conn?.open) {
             conn.send({
               type: "sync_players",
               senderId: peerId,
               timestamp: Date.now(),
-              players: room.players,
+              players: updatedPlayers,
               roomCode: room.roomCode,
+              roomStatus: room.status,
             } as PeerMessage);
           }
           return;
@@ -419,6 +576,7 @@ export const usePeerStore = create<PeerStore>((set, get) => ({
               timestamp: Date.now(),
               players: updatedPlayers,
               roomCode: room.roomCode,
+              roomStatus: room.status,
             } as PeerMessage);
           }
         });
@@ -429,15 +587,25 @@ export const usePeerStore = create<PeerStore>((set, get) => ({
         const syncMsg =
           message as import("@/src/domain/types/peer").SyncPlayersMessage;
 
+        const roomStatus = syncMsg.roomStatus ?? "waiting";
+        console.log("[PeerJS] sync_players received, roomStatus:", roomStatus);
+
         set({
           room: {
             roomCode: syncMsg.roomCode,
             players: syncMsg.players,
             isHost: false,
             hostPeerId: fromPeerId,
-            status: "waiting",
+            status: roomStatus,
           },
         });
+
+        // If game is in progress, the host will send resume_game message
+        if (roomStatus === "playing") {
+          console.log(
+            "[PeerJS] Game in progress, will receive resume_game soon"
+          );
+        }
         break;
       }
 
@@ -470,6 +638,7 @@ export const usePeerStore = create<PeerStore>((set, get) => ({
             timestamp: Date.now(),
             players: updatedPlayers,
             roomCode: room.roomCode,
+            roomStatus: room.status,
           });
         }
         break;
@@ -492,6 +661,7 @@ export const usePeerStore = create<PeerStore>((set, get) => ({
             timestamp: Date.now(),
             players: updatedPlayers,
             roomCode: room.roomCode,
+            roomStatus: room.status,
           });
         }
         break;
@@ -516,6 +686,7 @@ export const usePeerStore = create<PeerStore>((set, get) => ({
       case "game_end":
       case "game_start":
       case "new_round":
+      case "resume_game":
       case "sync_game_state": {
         const { onGameMessage, room, connections } = get();
 
@@ -623,6 +794,7 @@ export const usePeerStore = create<PeerStore>((set, get) => ({
         timestamp: Date.now(),
         players: updatedPlayers,
         roomCode: room.roomCode,
+        roomStatus: room.status,
       });
     } else if (hostConnection) {
       hostConnection.send(message);

@@ -69,6 +69,8 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
     broadcastToAll,
     connections,
     setOnGameMessage,
+    setOnPlayerReconnect,
+    setRoomStatus,
   } = usePeerStore();
   const connectionStatus = usePeerStore((s) => s.connectionStatus);
   const players = usePeerStore((s) => s.room?.players ?? EMPTY_PLAYERS);
@@ -398,6 +400,63 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
           break;
         }
 
+        case "resume_game": {
+          // Handle game resume after reconnection (client side)
+          const resumeMsg =
+            message as import("@/src/domain/types/peer").ResumeGameMessage;
+          console.log("[GamePlayView] Resuming game after reconnect");
+
+          // Restore game state
+          useGameStore.setState((state) => {
+            // Build player hands from resume data
+            const restoredPlayers = resumeMsg.allPlayers.map((p, idx) => ({
+              id: p.id,
+              name: p.name,
+              avatar: p.avatar,
+              hand:
+                p.name === user?.name
+                  ? resumeMsg.hand
+                  : Array.from({ length: p.handCount }, (_, i) => ({
+                      id: `dummy-${p.id}-${i}`,
+                      suit: "spade" as const,
+                      rank: "A" as const,
+                      value: 14,
+                      suitValue: 4,
+                    })), // Dummy cards for other players (only count matters)
+              hasPassed: p.hasPassed,
+              isCurrentTurn: p.isCurrentTurn,
+              finishOrder: p.finishOrder ?? null,
+              score: state.players[idx]?.score ?? 0,
+              roundScore: state.players[idx]?.roundScore ?? 0,
+              rank: state.players[idx]?.rank ?? null,
+            }));
+
+            return {
+              phase: resumeMsg.gameState.phase as
+                | "waiting"
+                | "dealing"
+                | "playing"
+                | "round_end"
+                | "game_end",
+              currentPlayerIndex: resumeMsg.gameState.currentPlayerIndex,
+              roundNumber: resumeMsg.gameState.roundNumber,
+              finishOrder: resumeMsg.gameState.finishOrder,
+              lastPlayerId: resumeMsg.gameState.lastPlayerId,
+              passCount: resumeMsg.gameState.passCount,
+              isFirstTurn: resumeMsg.gameState.isFirstTurn,
+              currentHand: resumeMsg.gameState.currentHand,
+              discardPile: resumeMsg.discardPile,
+              players: restoredPlayers,
+            };
+          });
+
+          // Mark game as started
+          setGameStarted(true);
+          addToast("success", "กลับเข้าเกมสำเร็จ!");
+          addSystemAction("new_round", "🔄 กลับเข้าเกมแล้ว");
+          break;
+        }
+
         default:
           console.log("[GamePlayView] Unhandled game message:", message.type);
       }
@@ -411,6 +470,7 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
   }, [
     players,
     phase,
+    user,
     initializeGame,
     applyRemotePlay,
     applyRemotePass,
@@ -572,6 +632,92 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
     broadcastToAll,
   ]);
 
+  // Setup onPlayerReconnect callback (host sends resume_game)
+  useEffect(() => {
+    if (!isHost) return;
+
+    const handlePlayerReconnect = (
+      playerId: string,
+      playerPeerId: string,
+      playerName: string
+    ) => {
+      console.log(
+        `[GamePlayView] Player reconnected: ${playerName} (${playerId})`
+      );
+
+      const gameState = useGameStore.getState();
+
+      // Find player by ID first, then by name as fallback
+      let playerIndex = gameState.players.findIndex((p) => p.id === playerId);
+      if (playerIndex < 0) {
+        playerIndex = gameState.players.findIndex((p) => p.name === playerName);
+      }
+
+      const player = gameState.players[playerIndex];
+
+      if (!player) {
+        console.error(
+          "[GamePlayView] Player not found for reconnect:",
+          playerName,
+          playerId
+        );
+        return;
+      }
+
+      console.log(
+        `[GamePlayView] Found player at index ${playerIndex}:`,
+        player.name
+      );
+
+      // Build resume message
+      const resumeMessage = {
+        type: "resume_game" as const,
+        senderId: peerId!,
+        timestamp: Date.now(),
+        hand: player.hand,
+        playerIndex,
+        gameState: {
+          phase: gameState.phase,
+          currentPlayerIndex: gameState.currentPlayerIndex,
+          roundNumber: gameState.roundNumber,
+          finishOrder: gameState.finishOrder,
+          lastPlayerId: gameState.lastPlayerId,
+          passCount: gameState.passCount,
+          isFirstTurn: gameState.isFirstTurn,
+          currentHand: gameState.currentHand,
+        },
+        discardPile: gameState.discardPile,
+        allPlayers: gameState.players.map((p) => ({
+          id: p.id,
+          name: p.name,
+          avatar: p.avatar,
+          handCount: p.hand.length,
+          hasPassed: p.hasPassed,
+          isCurrentTurn: p.isCurrentTurn,
+          finishOrder: p.finishOrder ?? undefined,
+        })),
+      };
+
+      // Send to reconnecting player (delay to ensure client has setup handler)
+      const conn = connections.get(playerPeerId);
+      if (conn?.open) {
+        // Delay to allow client to setup message handler
+        setTimeout(() => {
+          if (conn.open) {
+            conn.send(resumeMessage);
+            addToast("info", `ส่งข้อมูลเกมให้ ${player.name} แล้ว`);
+          }
+        }, 500);
+      }
+    };
+
+    setOnPlayerReconnect(handlePlayerReconnect);
+
+    return () => {
+      setOnPlayerReconnect(null);
+    };
+  }, [isHost, peerId, connections, setOnPlayerReconnect, addToast]);
+
   // Cleanup connection store on unmount
   useEffect(() => {
     return () => {
@@ -635,6 +781,7 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
     useGameStore.getState().startGame();
 
     setGameStarted(true);
+    setRoomStatus("playing"); // Mark room as playing for reconnection logic
 
     // Broadcast game state to all players
     const gameState = useGameStore.getState();
@@ -705,6 +852,7 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
     initializeGame,
     addSystemAction,
     addGameAction,
+    setRoomStatus,
   ]);
 
   // Handle card selection
