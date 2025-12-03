@@ -3,6 +3,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { soundService } from "../../infrastructure/audio/soundService";
 
+export type GameBgmStyle =
+  | "adventure"
+  | "battle"
+  | "castle"
+  | "tavern"
+  | "tension";
+
 /**
  * Hook to use game sounds
  */
@@ -10,6 +17,8 @@ export function useSound() {
   const [enabled, setEnabled] = useState(true);
   const [volume, setVolume] = useState(0.3);
   const [bgmPlaying, setBgmPlaying] = useState(false);
+  const [gameBgmStyle, setGameBgmStyleState] =
+    useState<GameBgmStyle>("adventure");
 
   // Load settings from localStorage
   useEffect(() => {
@@ -33,6 +42,13 @@ export function useSound() {
 
     if (savedBgm !== null) {
       soundService.setBgmEnabled(savedBgm === "true");
+    }
+
+    const savedBgmStyle = localStorage.getItem("bgm_style");
+    if (savedBgmStyle !== null) {
+      const style = savedBgmStyle as GameBgmStyle;
+      setGameBgmStyleState(style);
+      soundService.setGameBgmStyle(style);
     }
   }, []);
 
@@ -94,10 +110,17 @@ export function useSound() {
     return isPlaying;
   }, []);
 
+  const setGameBgmStyle = useCallback((style: GameBgmStyle) => {
+    soundService.setGameBgmStyle(style);
+    setGameBgmStyleState(style);
+    localStorage.setItem("bgm_style", style);
+  }, []);
+
   return {
     enabled,
     volume,
     bgmPlaying,
+    gameBgmStyle,
     toggleSound,
     updateVolume,
     // Game sounds
@@ -119,5 +142,6 @@ export function useSound() {
     startGameBgm,
     stopBgm,
     toggleBgm,
+    setGameBgmStyle,
   };
 }

@@ -111,11 +111,12 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
   const {
     enabled: soundEnabled,
     bgmPlaying,
+    gameBgmStyle,
     toggleSound,
     toggleBgm,
-    startBgm,
     startGameBgm,
     stopBgm,
+    setGameBgmStyle,
     playCardPlay,
     playCardSelect,
     playPass,
@@ -250,19 +251,23 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
     prevPlayerCount.current = players.length;
   }, [players.length, gameStarted, playPlayerJoin]);
 
-  // Switch BGM based on game state
+  // Auto-start BGM when entering waiting room or game
+  const bgmAutoStarted = useRef(false);
   useEffect(() => {
-    if (!gameStarted && players.length > 0) {
-      // In waiting room with players - start waiting BGM
-      startBgm("waiting");
-    } else if (gameStarted) {
-      // Game started - switch to game BGM
+    // Auto-start BGM when players join (waiting room or game)
+    if (players.length > 0 && !bgmAutoStarted.current) {
       startGameBgm();
+      bgmAutoStarted.current = true;
     }
+  }, [players.length, startGameBgm]);
+
+  // Stop BGM only when unmounting
+  useEffect(() => {
     return () => {
       stopBgm();
     };
-  }, [gameStarted, players.length, startBgm, startGameBgm, stopBgm]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Initialize P2P connection
   useEffect(() => {
@@ -1442,6 +1447,7 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
               </button>
 
               <div className="flex items-center gap-2">
+                {/* Sound toggle */}
                 <button
                   onClick={toggleSound}
                   className="p-1 rounded hover:bg-green-800 transition-colors"
@@ -1453,6 +1459,27 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
                     <VolumeX className="w-4 h-4 text-gray-500" />
                   )}
                 </button>
+                {/* BGM Style Selector */}
+                <select
+                  value={bgmPlaying ? gameBgmStyle : "off"}
+                  onChange={(e) => {
+                    if (e.target.value === "off") {
+                      stopBgm();
+                    } else {
+                      setGameBgmStyle(e.target.value as typeof gameBgmStyle);
+                      if (!bgmPlaying) startGameBgm();
+                    }
+                  }}
+                  className="bg-green-800 text-white text-xs rounded px-1.5 py-0.5 border-none outline-none cursor-pointer"
+                  title="เลือก BGM"
+                >
+                  <option value="off">🔇 ปิด</option>
+                  <option value="adventure">🗺️ ผจญภัย</option>
+                  <option value="battle">⚔️ ต่อสู้</option>
+                  <option value="castle">🏰 ปราสาท</option>
+                  <option value="tavern">🍺 โรงเตี๊ยม</option>
+                  <option value="tension">😰 ตึงเครียด</option>
+                </select>
                 <Wifi className="w-4 h-4 text-green-400" />
               </div>
             </div>
@@ -1764,6 +1791,27 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
               >
                 🎵
               </button>
+              {/* BGM Style Selector */}
+              <select
+                value={bgmPlaying ? gameBgmStyle : "off"}
+                onChange={(e) => {
+                  if (e.target.value === "off") {
+                    stopBgm();
+                  } else {
+                    setGameBgmStyle(e.target.value as typeof gameBgmStyle);
+                    if (!bgmPlaying) startGameBgm();
+                  }
+                }}
+                className="bg-gray-700 text-white text-xs rounded px-1.5 py-0.5 border-none outline-none cursor-pointer"
+                title="เลือก BGM"
+              >
+                <option value="off">🔇 ปิด</option>
+                <option value="adventure">🗺️ ผจญภัย</option>
+                <option value="battle">⚔️ ต่อสู้</option>
+                <option value="castle">🏰 ปราสาท</option>
+                <option value="tavern">🍺 โรงเตี๊ยม</option>
+                <option value="tension">😰 ตึงเครียด</option>
+              </select>
               {/* Connection status */}
               {connectionStatus === "connecting" && (
                 <Loader2 className="w-4 h-4 text-yellow-400 animate-spin" />
