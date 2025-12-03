@@ -1226,6 +1226,20 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
             </div>
           </div>
         </main>
+
+        {/* Sync Button for clients */}
+        {!isHost && (
+          <div className="fixed bottom-4 right-20 z-50">
+            <SyncButton onSync={requestSync} isSyncing={isSyncing} />
+          </div>
+        )}
+
+        {/* Chat Panel */}
+        <ChatContainer
+          messages={chatMessages}
+          onSendMessage={sendChatMessage}
+          currentPlayerName={user?.name ?? ""}
+        />
       </div>
     );
   }
