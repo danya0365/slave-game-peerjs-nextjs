@@ -1,5 +1,14 @@
 "use client";
 
+import {
+  AI_AVATARS,
+  AI_NAMES,
+  DEFAULT_AI_CONFIG,
+  generateAIPlayerId,
+  isAIPlayer,
+  makeAIDecision,
+  type AIDifficulty,
+} from "@/src/domain/services/aiService";
 import type { Card } from "@/src/domain/types/card";
 import { PLAYER_RANK_DISPLAY } from "@/src/domain/types/card";
 import type {
@@ -20,6 +29,7 @@ import { usePeerStore } from "@/src/presentation/stores/peerStore";
 import { useUserStore } from "@/src/presentation/stores/userStore";
 import {
   ArrowLeft,
+  Bot,
   Copy,
   Loader2,
   Trophy,
@@ -29,7 +39,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ChatContainer, type ChatMessageData } from "./ChatPanel";
 import { ConnectionLostModal } from "./ConnectionStatus";
 import {
@@ -104,6 +114,11 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
   const [gameActions, setGameActions] = useState<GameAction[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessageData[]>([]);
+
+  // AI mode state
+  const [aiModeEnabled, setAiModeEnabled] = useState(false);
+  const [aiDifficulty, setAiDifficulty] = useState<AIDifficulty>("medium");
+  const aiTurnInProgress = useRef(false);
 
   // Connection store
   const {
@@ -804,6 +819,181 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
     [user, peerId, isHost, broadcastToAll]
   );
 
+  // Track which AI is currently processing and which round to detect turn changes
+  const lastAIProcessingId = useRef<string | null>(null);
+  const lastProcessedRound = useRef<number>(-1);
+
+  // AI Turn Handler - automatically plays for AI players
+  useEffect(() => {
+    // Only host handles AI turns
+    if (!isHost || !gameStarted || phase !== "playing") return;
+
+    // Use roundNumber from component state (in dependency array)
+    const currentRound = roundNumber;
+
+    // Find current turn player
+    const currentPlayer = gamePlayers.find((p) => p.isCurrentTurn);
+    if (!currentPlayer) return;
+
+    // Check if current player is AI
+    if (!currentPlayer.isAI || isAIPlayer(currentPlayer.id) === false) {
+      // Reset if it's now a human's turn
+      aiTurnInProgress.current = false;
+      lastAIProcessingId.current = null;
+      return;
+    }
+
+    // Reset lock if:
+    // 1. Different AI's turn now
+    // 2. Same AI but different round (round reset - everyone passed back to this AI)
+    const shouldResetLock =
+      (lastAIProcessingId.current !== null &&
+        lastAIProcessingId.current !== currentPlayer.id) ||
+      (lastAIProcessingId.current === currentPlayer.id &&
+        lastProcessedRound.current !== currentRound);
+
+    if (shouldResetLock) {
+      console.log(
+        `AI turn reset: player=${currentPlayer.id}, round=${currentRound}, prevRound=${lastProcessedRound.current}`
+      );
+      aiTurnInProgress.current = false;
+    }
+
+    // Prevent multiple AI turns at once
+    if (aiTurnInProgress.current) return;
+
+    aiTurnInProgress.current = true;
+    lastAIProcessingId.current = currentPlayer.id;
+    lastProcessedRound.current = currentRound;
+
+    // Delay AI move for realism
+    const thinkingDelay = DEFAULT_AI_CONFIG.thinkingDelayMs;
+
+    const timeoutId = setTimeout(() => {
+      // Get FRESH state when making decision (important after round resets)
+      const freshState = useGameStore.getState();
+      const aiPlayer = freshState.players.find(
+        (p) => p.id === currentPlayer.id
+      );
+
+      // Check if it's still AI's turn (state might have changed)
+      if (!aiPlayer?.isCurrentTurn) {
+        aiTurnInProgress.current = false;
+        return;
+      }
+
+      const aiHand = aiPlayer.hand;
+      const currentHandOnTable = freshState.currentHand;
+      const isFirst = freshState.isFirstTurn;
+
+      // Make AI decision with fresh state
+      const decision = makeAIDecision(
+        aiHand,
+        currentHandOnTable,
+        isFirst,
+        aiDifficulty
+      );
+
+      if (decision.action === "play" && decision.cards && decision.playedHand) {
+        // AI plays cards
+        const success = useGameStore
+          .getState()
+          .playCards(currentPlayer.id, decision.cards);
+        if (success) {
+          // Add to game history
+          addGameAction(currentPlayer.id, "play", decision.cards);
+
+          // Broadcast to other players (non-AI only)
+          const message = {
+            type: "play_cards" as const,
+            senderId: peerId!,
+            timestamp: Date.now(),
+            playerId: currentPlayer.id,
+            cards: decision.cards,
+            playedHand: decision.playedHand,
+          };
+
+          // Only send to real players (not AI)
+          connections.forEach((conn, connPeerId) => {
+            if (!connPeerId.startsWith("ai-peer-") && conn.open) {
+              conn.send(message);
+            }
+          });
+        }
+      } else if (decision.action === "pass") {
+        // AI passes - but check if pass is allowed
+        const canPassNow = useGameStore.getState().canPass(currentPlayer.id);
+
+        if (canPassNow) {
+          const success = useGameStore.getState().pass(currentPlayer.id);
+          if (success) {
+            // Add to game history
+            addGameAction(currentPlayer.id, "pass");
+
+            // Broadcast to other players (non-AI only)
+            const message = {
+              type: "pass_turn" as const,
+              senderId: peerId!,
+              timestamp: Date.now(),
+              playerId: currentPlayer.id,
+            };
+
+            connections.forEach((conn, connPeerId) => {
+              if (!connPeerId.startsWith("ai-peer-") && conn.open) {
+                conn.send(message);
+              }
+            });
+          }
+        } else {
+          // AI tried to pass but can't (fresh round) - force play lowest card
+          console.warn("AI tried to pass but can't - forcing play");
+          const lowestCard = aiHand[0]; // Hand should be sorted
+          if (lowestCard) {
+            const forcedHand = createPlayedHand([lowestCard], currentPlayer.id);
+            if (forcedHand) {
+              const success = useGameStore
+                .getState()
+                .playCards(currentPlayer.id, [lowestCard]);
+              if (success) {
+                addGameAction(currentPlayer.id, "play", [lowestCard]);
+                const message = {
+                  type: "play_cards" as const,
+                  senderId: peerId!,
+                  timestamp: Date.now(),
+                  playerId: currentPlayer.id,
+                  cards: [lowestCard],
+                  playedHand: forcedHand,
+                };
+                connections.forEach((conn, connPeerId) => {
+                  if (!connPeerId.startsWith("ai-peer-") && conn.open) {
+                    conn.send(message);
+                  }
+                });
+              }
+            }
+          }
+        }
+      }
+
+      aiTurnInProgress.current = false;
+    }, thinkingDelay);
+
+    return () => {
+      clearTimeout(timeoutId);
+      aiTurnInProgress.current = false;
+    };
+  }, [
+    isHost,
+    gameStarted,
+    phase,
+    gamePlayers,
+    aiDifficulty,
+    peerId,
+    connections,
+    addGameAction,
+    roundNumber, // Add roundNumber to trigger when round resets
+  ]);
+
   // Copy room code
   const copyRoomCode = async () => {
     try {
@@ -825,13 +1015,37 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
 
   // Start game (host only)
   const handleStartGame = useCallback(() => {
-    if (!isHost || players.length !== 4) return;
+    if (!isHost) return;
+
+    // Build player list - add AI players if needed
+    const allPlayers = [...players];
+
+    // If AI mode enabled and not enough players, add AI players
+    if (aiModeEnabled && players.length < 4) {
+      const aiPlayersNeeded = 4 - players.length;
+      for (let i = 0; i < aiPlayersNeeded; i++) {
+        allPlayers.push({
+          peerId: `ai-peer-${i}`,
+          id: generateAIPlayerId(i),
+          name: AI_NAMES[i % AI_NAMES.length],
+          avatar: AI_AVATARS[i % AI_AVATARS.length],
+          isHost: false,
+          isReady: true,
+          isConnected: true,
+          isAI: true,
+        });
+      }
+    }
+
+    // Must have exactly 4 players
+    if (allPlayers.length !== 4) return;
 
     // Initialize game store
-    const playerInfos = players.map((p) => ({
+    const playerInfos = allPlayers.map((p) => ({
       id: p.id,
       name: p.name,
       avatar: p.avatar,
+      isAI: p.isAI ?? false,
     }));
     initializeGame(playerInfos);
 
@@ -911,6 +1125,7 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
     addSystemAction,
     addGameAction,
     setRoomStatus,
+    aiModeEnabled,
   ]);
 
   // Handle card selection
@@ -1011,8 +1226,17 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
     (!isFirstTurn || containsThreeOfClubs(selectedCards));
 
   // Check all players ready
-  const allPlayersReady =
-    players.length === 4 && players.every((p) => p.isReady);
+  // If AI mode is enabled, allow starting with less than 4 players (AI will fill in)
+  const allPlayersReady = aiModeEnabled
+    ? players.length >= 1 && players.every((p) => p.isReady)
+    : players.length === 4 && players.every((p) => p.isReady);
+
+  // Can start game check - different for AI mode
+  const canStartGame = aiModeEnabled
+    ? players.length >= 1 &&
+      players.length <= 4 &&
+      players.every((p) => p.isReady)
+    : players.length === 4 && players.every((p) => p.isReady);
 
   // Loading state
   if (!hasHydrated) {
@@ -1555,6 +1779,83 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
             </div>
           </div>
 
+          {/* AI Mode Toggle (Host Only) */}
+          {isHost && (
+            <div className="bg-gray-800 rounded-xl p-6 mb-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <Bot className="w-5 h-5 text-purple-400" />
+                  <h2 className="font-medium text-white">โหมดเล่นกับ AI</h2>
+                </div>
+                <button
+                  onClick={() => setAiModeEnabled(!aiModeEnabled)}
+                  className={cn(
+                    "relative inline-flex h-6 w-11 items-center rounded-full transition-colors",
+                    aiModeEnabled ? "bg-purple-500" : "bg-gray-600"
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "inline-block h-4 w-4 transform rounded-full bg-white transition-transform",
+                      aiModeEnabled ? "translate-x-6" : "translate-x-1"
+                    )}
+                  />
+                </button>
+              </div>
+
+              {aiModeEnabled && (
+                <>
+                  <p className="text-gray-400 text-sm mb-4">
+                    เปิดใช้งาน AI เพื่อเติมผู้เล่นที่ขาด (ต้องการ 4 คน, มี{" "}
+                    {players.length} คน, AI จะเติม {4 - players.length} คน)
+                  </p>
+
+                  {/* AI Difficulty Selector */}
+                  <div className="space-y-2">
+                    <label className="text-sm text-gray-400">
+                      ระดับความยาก:
+                    </label>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setAiDifficulty("easy")}
+                        className={cn(
+                          "flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors",
+                          aiDifficulty === "easy"
+                            ? "bg-green-500 text-white"
+                            : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                        )}
+                      >
+                        ง่าย
+                      </button>
+                      <button
+                        onClick={() => setAiDifficulty("medium")}
+                        className={cn(
+                          "flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors",
+                          aiDifficulty === "medium"
+                            ? "bg-yellow-500 text-white"
+                            : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                        )}
+                      >
+                        ปานกลาง
+                      </button>
+                      <button
+                        onClick={() => setAiDifficulty("hard")}
+                        className={cn(
+                          "flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors",
+                          aiDifficulty === "hard"
+                            ? "bg-red-500 text-white"
+                            : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                        )}
+                      >
+                        ยาก
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
           {/* Ready button */}
           <button
             onClick={toggleReady}
@@ -1574,13 +1875,19 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
           {isHost && (
             <button
               onClick={handleStartGame}
-              disabled={!allPlayersReady}
+              disabled={!canStartGame}
               className="w-full py-4 rounded-xl bg-linear-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-semibold text-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {!allPlayersReady
-                ? `รอผู้เล่นพร้อม (${players.filter((p) => p.isReady).length}/${
-                    players.length
-                  })`
+              {!canStartGame
+                ? aiModeEnabled
+                  ? `รอผู้เล่นพร้อม (${
+                      players.filter((p) => p.isReady).length
+                    }/${players.length})`
+                  : `รอผู้เล่นครบ 4 คน (${
+                      players.filter((p) => p.isReady).length
+                    }/${players.length})`
+                : aiModeEnabled && players.length < 4
+                ? `เริ่มเกมกับ AI (${4 - players.length} บอท)`
                 : "เริ่มเกม!"}
             </button>
           )}

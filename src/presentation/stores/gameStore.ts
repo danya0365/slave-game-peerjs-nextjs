@@ -29,6 +29,7 @@ export interface GamePlayer {
   rank: PlayerRank | null;
   score: number; // Accumulated score across rounds
   roundScore: number; // Score earned this round
+  isAI?: boolean; // AI player flag
 }
 
 // Score constants
@@ -132,6 +133,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       rank: null,
       score: 0,
       roundScore: 0,
+      isAI: (info as { isAI?: boolean }).isAI ?? false,
     }));
 
     set({
@@ -429,7 +431,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   // Move to next player's turn
   nextTurn: () => {
-    const { players, currentPlayerIndex, finishOrder } = get();
+    const { players, currentPlayerIndex, finishOrder, lastPlayerId } = get();
 
     // Find next active player
     let nextIndex = currentPlayerIndex;
@@ -450,7 +452,29 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     } while (attempts < 4);
 
-    // Update current player
+    const nextPlayer = players[nextIndex];
+
+    // Check if next player is the same as lastPlayer (everyone else passed)
+    // This means round should reset - the next player won this round
+    if (nextPlayer && nextPlayer.id === lastPlayerId) {
+      // Reset the round - next player starts fresh
+      const updatedPlayers = players.map((player, index) => ({
+        ...player,
+        hasPassed: false,
+        isCurrentTurn: index === nextIndex,
+      }));
+
+      set({
+        players: updatedPlayers,
+        currentPlayerIndex: nextIndex,
+        currentHand: null, // Clear the table - player can play anything
+        passCount: 0,
+        roundNumber: get().roundNumber + 1,
+      });
+      return;
+    }
+
+    // Normal turn change
     const updatedPlayers = players.map((player, index) => ({
       ...player,
       isCurrentTurn: index === nextIndex,

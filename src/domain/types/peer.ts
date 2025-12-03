@@ -16,6 +16,7 @@ export interface PeerPlayer {
   isHost: boolean;
   isReady: boolean;
   isConnected: boolean;
+  isAI?: boolean; // AI player flag
   connectionHealth?: PlayerConnectionStatus;
   lastPingTime?: number;
 }

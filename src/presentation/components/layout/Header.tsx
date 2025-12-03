@@ -12,6 +12,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { label: "หน้าแรก", href: "/" },
+  { label: "เล่นเกม", href: "/lobby" },
   { label: "วิธีเล่น", href: "/how-to-play" },
   { label: "โปรไฟล์", href: "/profile" },
 ];
