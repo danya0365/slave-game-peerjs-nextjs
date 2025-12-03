@@ -1322,7 +1322,7 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
     const rightPlayer = gamePlayers[rightIndex];
 
     return (
-      <div className="h-screen bg-linear-to-b from-green-900 to-green-950 flex flex-col overflow-hidden">
+      <div className="h-screen bg-linear-to-b from-green-900 to-green-950 flex flex-col overflow-x-hidden overflow-y-hidden">
         {/* Compact Header */}
         <header className="shrink-0 border-b border-green-800 bg-green-900/80 backdrop-blur-md">
           <div className="container mx-auto px-2 md:px-4 py-1.5 md:py-2">
@@ -1363,7 +1363,7 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
         />
 
         {/* Game Area - Fixed height with better mobile positioning */}
-        <main className="flex-1 relative min-h-0">
+        <main className="flex-1 relative min-h-0 overflow-visible">
           {/* Top opponent - positioned higher on mobile */}
           {topPlayer && (
             <div className="absolute top-1 md:top-4 left-1/2 -translate-x-1/2">
@@ -1423,7 +1423,7 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
           </div>
 
           {/* My hand - positioned at bottom with controls */}
-          <div className="absolute bottom-0 left-0 right-0 pb-2 md:pb-4 px-2 flex flex-col items-center">
+          <div className="absolute bottom-0 left-0 right-0 pb-2 md:pb-4 px-2 flex flex-col items-center z-30">
             <PlayerHand
               cards={myHand}
               selectedCards={selectedCards}

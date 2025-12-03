@@ -36,7 +36,7 @@ export function PlayerHand({
   const overlap = getOverlap();
 
   return (
-    <div className="relative w-full max-w-[95vw] md:max-w-none">
+    <div className="relative w-full max-w-[95vw] md:max-w-none overflow-visible">
       {/* Turn indicator */}
       {isCurrentTurn && (
         <div className="absolute -top-6 md:-top-8 left-1/2 -translate-x-1/2 px-2 md:px-3 py-0.5 md:py-1 bg-yellow-500 text-yellow-900 rounded-full text-xs md:text-sm font-bold animate-pulse whitespace-nowrap">
@@ -44,10 +44,10 @@ export function PlayerHand({
         </div>
       )}
 
-      {/* Cards - scrollable on mobile if too many */}
+      {/* Cards - allow overflow for hover effect */}
       <div
         className={cn(
-          "flex justify-center items-end overflow-x-auto pb-2",
+          "flex justify-center items-end overflow-visible pb-2 pt-4",
           "transition-all duration-300",
           isCurrentTurn && "md:scale-105"
         )}

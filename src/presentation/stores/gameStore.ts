@@ -457,17 +457,35 @@ export const useGameStore = create<GameStore>((set, get) => ({
     // Check if next player is the same as lastPlayer (everyone else passed)
     // This means round should reset - the next player won this round
     if (nextPlayer && nextPlayer.id === lastPlayerId) {
-      // Reset the round - next player starts fresh
+      // Check if lastPlayer has finished - if so, find next active player
+      const lastPlayerFinished = finishOrder.includes(lastPlayerId);
+
+      let roundWinnerIndex = nextIndex;
+      if (lastPlayerFinished) {
+        // Find next active player after the finished player
+        let searchIndex = nextIndex;
+        for (let i = 0; i < 4; i++) {
+          searchIndex = (searchIndex + 1) % 4;
+          const candidate = players[searchIndex];
+          if (!finishOrder.includes(candidate.id)) {
+            roundWinnerIndex = searchIndex;
+            break;
+          }
+        }
+      }
+
+      // Reset the round - winner starts fresh
       const updatedPlayers = players.map((player, index) => ({
         ...player,
         hasPassed: false,
-        isCurrentTurn: index === nextIndex,
+        isCurrentTurn: index === roundWinnerIndex,
       }));
 
       set({
         players: updatedPlayers,
-        currentPlayerIndex: nextIndex,
+        currentPlayerIndex: roundWinnerIndex,
         currentHand: null, // Clear the table - player can play anything
+        discardPile: [], // Clear discard pile for new round
         passCount: 0,
         roundNumber: get().roundNumber + 1,
       });
