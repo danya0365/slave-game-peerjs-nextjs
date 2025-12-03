@@ -1,0 +1,34 @@
+/* 4) Overrides ตอนเป็น .dark (แค่เปลี่ยนค่าตัวแปรก็พอ) */
+@layer base {
+  .dark {
+    --color-background: #0a0a0a;
+    --color-foreground: #f5f5f5;
+    --color-surface: #1a1a1a;
+    --color-on-surface: #ffffff;
+
+    /* Status colors for dark mode */
+    --color-success-light: #065f46;
+    --color-success-dark: #34d399;
+    --color-warning-light: #92400e;
+    --color-warning-dark: #fbbf24;
+    --color-error-light: #991b1b;
+    --color-error-dark: #f87171;
+    --color-info-light: #1e3a8a;
+    --color-info-dark: #60a5fa;
+
+    /* UI Colors - Gray scale (dark mode) */
+    --color-muted: #9ca3af;
+    --color-muted-light: #1f2937;
+    --color-muted-dark: #d1d5db;
+    --color-border: #374151;
+    --color-border-light: #1f2937;
+    --color-border-dark: #6b7280;
+
+    /* Input colors (dark mode) */
+    --color-input: #374151;
+    --color-input-bg: #1f2937;
+    --color-input-focus: #1f2937;
+    --color-input-placeholder: #6b7280;
+    --color-input-border: #374151;
+  }
+}

@@ -1,0 +1,39 @@
+@layer base {
+  /* Backend Layout utilities */
+  .backend-bg {
+    @apply bg-gray-50 dark:bg-gray-900;
+  }
+  .backend-header-bg {
+    @apply bg-white dark:bg-gray-800;
+  }
+  .backend-header-border {
+    @apply border-gray-200 dark:border-gray-700;
+  }
+  .backend-sidebar-bg {
+    @apply bg-white dark:bg-gray-800;
+  }
+  .backend-sidebar-border {
+    @apply border-gray-200 dark:border-gray-700;
+  }
+  .backend-sidebar-active {
+    @apply bg-gray-100 dark:bg-gray-700;
+  }
+  .backend-sidebar-hover {
+    @apply hover:bg-gray-50 dark:hover:bg-gray-700;
+  }
+  .backend-text {
+    @apply text-gray-900 dark:text-gray-100;
+  }
+  .backend-text-muted {
+    @apply text-gray-700 dark:text-gray-300;
+  }
+  .backend-primary {
+    @apply text-blue-600 dark:text-blue-400;
+  }
+  .backend-primary-hover {
+    @apply hover:text-blue-600 dark:hover:text-blue-400;
+  }
+  .backend-danger-hover {
+    @apply hover:text-red-600 dark:hover:text-red-400;
+  }
+}
