@@ -165,6 +165,7 @@ export interface SyncRequestMessage extends BaseMessage {
 // Sync game state message (host sends current game state)
 export interface SyncGameStateMessage extends BaseMessage {
   type: "sync_game_state";
+  hand: Card[]; // The requesting player's actual hand
   gameState: {
     phase: string;
     currentPlayerIndex: number;
@@ -172,10 +173,20 @@ export interface SyncGameStateMessage extends BaseMessage {
     finishOrder: string[];
     lastPlayerId: string | null;
     passCount: number;
-    // Hand counts for each player
-    handCounts: number[];
+    isFirstTurn: boolean;
+    currentHand: PlayedHand | null;
   };
-  players: PeerPlayer[];
+  discardPile: PlayedHand[];
+  allPlayers: {
+    id: string;
+    name: string;
+    avatar: string;
+    handCount: number;
+    hasPassed: boolean;
+    isCurrentTurn: boolean;
+    finishOrder?: number;
+    isAI?: boolean;
+  }[];
 }
 
 // Resume game message (host sends to reconnecting player)

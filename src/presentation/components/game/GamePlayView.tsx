@@ -32,6 +32,7 @@ import {
   Bot,
   Copy,
   Loader2,
+  RefreshCw,
   Trophy,
   Users,
   Volume2,
@@ -45,11 +46,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useSound } from "../../hooks/useSound";
 import { ChatContainer, type ChatMessageData } from "./ChatPanel";
 import { ConnectionLostModal } from "./ConnectionStatus";
-import {
-  DisconnectedPlayersBanner,
-  SyncButton,
-  ToastContainer,
-} from "./ConnectionUI";
+import { DisconnectedPlayersBanner, ToastContainer } from "./ConnectionUI";
 import {
   GameStateHUD,
   type GameAction,
@@ -471,11 +468,24 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
             .getState()
             .connections.get(syncReq.senderId);
 
-          if (conn?.open) {
+          // Find the requesting player to get their hand
+          const requestingPlayer = gameState.players.find(
+            (p) => p.id === syncReq.playerId
+          );
+
+          if (conn?.open && requestingPlayer) {
+            console.log(
+              "[GamePlayView] Sending sync_game_state to:",
+              syncReq.playerId,
+              "hand size:",
+              requestingPlayer.hand.length
+            );
+
             conn.send({
               type: "sync_game_state" as const,
               senderId: usePeerStore.getState().peerId!,
               timestamp: Date.now(),
+              hand: requestingPlayer.hand, // Send their actual hand
               gameState: {
                 phase: gameState.phase,
                 currentPlayerIndex: gameState.currentPlayerIndex,
@@ -483,22 +493,83 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
                 finishOrder: gameState.finishOrder,
                 lastPlayerId: gameState.lastPlayerId,
                 passCount: gameState.passCount,
-                handCounts: gameState.players.map((p) => p.hand.length),
+                isFirstTurn: gameState.isFirstTurn,
+                currentHand: gameState.currentHand,
               },
-              players: usePeerStore.getState().room?.players || [],
+              discardPile: gameState.discardPile,
+              allPlayers: gameState.players.map((p) => ({
+                id: p.id,
+                name: p.name,
+                avatar: p.avatar,
+                handCount: p.hand.length,
+                hasPassed: p.hasPassed,
+                isCurrentTurn: p.isCurrentTurn,
+                finishOrder: p.finishOrder ?? undefined,
+                isAI: p.isAI ?? false,
+              })),
             });
-            addToast("info", `Sync ข้อมูลให้ผู้เล่นที่ reconnect แล้ว`);
+            addToast("info", `Sync ข้อมูลให้ ${requestingPlayer.name} แล้ว`);
           }
           break;
         }
 
         case "sync_game_state": {
-          // Host sent us the current game state
-          console.log("[GamePlayView] Received sync game state");
+          // Host sent us the current game state - apply it!
+          const syncMsg =
+            message as import("@/src/domain/types/peer").SyncGameStateMessage;
+          console.log(
+            "[GamePlayView] Received sync game state, hand size:",
+            syncMsg.hand?.length
+          );
+
+          // Restore game state similar to resume_game
+          useGameStore.setState((state) => {
+            // Build player info from sync data
+            const restoredPlayers = syncMsg.allPlayers.map((p, idx) => ({
+              id: p.id,
+              name: p.name,
+              avatar: p.avatar,
+              isAI: p.isAI ?? false,
+              hand:
+                p.id === myPlayerId
+                  ? syncMsg.hand // Use actual hand for this player
+                  : Array.from({ length: p.handCount }, (_, i) => ({
+                      id: `dummy-${p.id}-${i}`,
+                      suit: "spade" as const,
+                      rank: "A" as const,
+                      value: 14,
+                      suitValue: 4,
+                    })), // Dummy cards for other players (only count matters)
+              hasPassed: p.hasPassed,
+              isCurrentTurn: p.isCurrentTurn,
+              finishOrder: p.finishOrder ?? null,
+              score: state.players[idx]?.score ?? 0,
+              roundScore: state.players[idx]?.roundScore ?? 0,
+              rank: state.players[idx]?.rank ?? null,
+            }));
+
+            return {
+              phase: syncMsg.gameState.phase as
+                | "waiting"
+                | "dealing"
+                | "playing"
+                | "round_end"
+                | "game_end",
+              currentPlayerIndex: syncMsg.gameState.currentPlayerIndex,
+              roundNumber: syncMsg.gameState.roundNumber,
+              finishOrder: syncMsg.gameState.finishOrder,
+              lastPlayerId: syncMsg.gameState.lastPlayerId,
+              passCount: syncMsg.gameState.passCount,
+              isFirstTurn: syncMsg.gameState.isFirstTurn,
+              currentHand: syncMsg.gameState.currentHand,
+              discardPile: syncMsg.discardPile,
+              players: restoredPlayers,
+            };
+          });
+
           setIsSyncing(false);
           addToast("success", "Sync สำเร็จ!");
-          // Note: Full state restoration would require more complex logic
-          // For now, just acknowledge the sync
+          console.log("[GamePlayView] Game state restored from sync");
           break;
         }
 
@@ -603,6 +674,7 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
     players,
     phase,
     user,
+    myPlayerId,
     initializeGame,
     applyRemotePlay,
     applyRemotePass,
@@ -1496,7 +1568,7 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
     const rightPlayer = gamePlayers[rightIndex];
 
     return (
-      <div className="h-screen bg-linear-to-b from-green-900 to-green-950 flex flex-col overflow-x-hidden overflow-y-hidden">
+      <div className="h-svh bg-linear-to-b from-green-900 to-green-950 flex flex-col overflow-x-hidden overflow-y-hidden">
         {/* Compact Header */}
         <header className="shrink-0 border-b border-green-800 bg-green-900/80 backdrop-blur-md">
           <div className="container mx-auto px-2 md:px-4 py-1.5 md:py-2">
@@ -1556,33 +1628,55 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
                   <option value="tavern">🍺 โรงเตี๊ยม</option>
                   <option value="tension">😰 ตึงเครียด</option>
                 </select>
-                {/* Connection status indicator */}
-                <div
-                  className="flex items-center gap-1"
-                  title={
-                    isHost
-                      ? "Host"
-                      : hostConnectionStatus === "connected"
-                      ? "เชื่อมต่อปกติ"
-                      : hostConnectionStatus === "stale"
-                      ? "การเชื่อมต่อไม่เสถียร"
-                      : "หลุดการเชื่อมต่อ"
-                  }
-                >
-                  {isHost ? (
-                    <Wifi className="w-4 h-4 text-green-400" />
-                  ) : hostConnectionStatus === "connected" ? (
-                    <Wifi className="w-4 h-4 text-green-400" />
-                  ) : hostConnectionStatus === "stale" ? (
-                    <Wifi className="w-4 h-4 text-yellow-400 animate-pulse" />
-                  ) : (
-                    <WifiOff className="w-4 h-4 text-red-400 animate-pulse" />
+                {/* Connection status indicator with inline sync */}
+                <div className="flex items-center gap-1">
+                  {!isHost && (
+                    <button
+                      onClick={requestSync}
+                      disabled={isSyncing}
+                      className={cn(
+                        "p-1 rounded transition-colors",
+                        isSyncing
+                          ? "text-gray-500"
+                          : hostConnectionStatus === "connected"
+                          ? "text-green-400 hover:bg-green-800"
+                          : "text-yellow-400 hover:bg-yellow-800 animate-pulse"
+                      )}
+                      title={
+                        isSyncing
+                          ? "กำลัง Sync..."
+                          : hostConnectionStatus === "connected"
+                          ? "Sync State"
+                          : "การเชื่อมต่อไม่เสถียร - กด Sync"
+                      }
+                    >
+                      <RefreshCw
+                        className={cn("w-4 h-4", isSyncing && "animate-spin")}
+                      />
+                    </button>
                   )}
-                  {!isHost && hostConnectionStatus !== "connected" && (
-                    <span className="text-xs text-yellow-400">
-                      {hostConnectionStatus === "stale" ? "⚠️" : "❌"}
-                    </span>
-                  )}
+                  <div
+                    className="p-1"
+                    title={
+                      isHost
+                        ? "Host"
+                        : hostConnectionStatus === "connected"
+                        ? "เชื่อมต่อปกติ"
+                        : hostConnectionStatus === "stale"
+                        ? "การเชื่อมต่อไม่เสถียร"
+                        : "หลุดการเชื่อมต่อ"
+                    }
+                  >
+                    {isHost ? (
+                      <Wifi className="w-4 h-4 text-green-400" />
+                    ) : hostConnectionStatus === "connected" ? (
+                      <Wifi className="w-4 h-4 text-green-400" />
+                    ) : hostConnectionStatus === "stale" ? (
+                      <Wifi className="w-4 h-4 text-yellow-400 animate-pulse" />
+                    ) : (
+                      <WifiOff className="w-4 h-4 text-red-400 animate-pulse" />
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -1716,13 +1810,6 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
             )}
           </div>
         </main>
-
-        {/* Sync Button for clients */}
-        {!isHost && (
-          <div className="fixed bottom-4 right-20 z-50">
-            <SyncButton onSync={requestSync} isSyncing={isSyncing} />
-          </div>
-        )}
 
         {/* Chat Panel */}
         <ChatContainer
@@ -1873,7 +1960,7 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
 
   // Waiting room (default)
   return (
-    <div className="h-screen bg-linear-to-b from-gray-900 to-gray-950 flex flex-col overflow-hidden">
+    <div className="h-svh bg-linear-to-b from-gray-900 to-gray-950 flex flex-col overflow-hidden">
       {/* Compact Header */}
       <header className="shrink-0 border-b border-gray-800 bg-gray-900/80 backdrop-blur-md">
         <div className="container mx-auto px-4 py-2">
@@ -2139,18 +2226,15 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
               </div>
             )}
 
-            {/* Spacer */}
-            <div className="flex-1" />
-
-            {/* Action Buttons */}
-            <div className="space-y-2">
-              {/* Ready button */}
+            {/* Action Buttons - Positioned with safe padding for mobile */}
+            <div className="mt-auto pt-4 pb-6 space-y-3">
+              {/* Ready button - Larger touch target */}
               <button
                 onClick={toggleReady}
                 className={cn(
-                  "w-full py-3 rounded-lg font-semibold transition-all",
+                  "w-full py-4 rounded-xl font-semibold text-lg transition-all active:scale-[0.98]",
                   players.find((p) => p.id === user.id)?.isReady
-                    ? "bg-green-600 hover:bg-green-700 text-white"
+                    ? "bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-900/30"
                     : "bg-gray-700 hover:bg-gray-600 text-white"
                 )}
               >
@@ -2159,12 +2243,12 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
                   : "กดเพื่อพร้อม"}
               </button>
 
-              {/* Start game button (host only) */}
+              {/* Start game button (host only) - Larger touch target */}
               {isHost && (
                 <button
                   onClick={handleStartGame}
                   disabled={!canStartGame}
-                  className="w-full py-3 rounded-lg bg-linear-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full py-4 rounded-xl bg-linear-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-semibold text-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] shadow-lg shadow-red-900/30"
                 >
                   {!canStartGame
                     ? aiModeEnabled
@@ -2179,7 +2263,7 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
               )}
 
               {!isHost && allPlayersReady && (
-                <p className="text-center text-gray-500 text-sm">
+                <p className="text-center text-gray-500 text-sm pb-2">
                   รอเจ้าของห้องเริ่มเกม...
                 </p>
               )}
@@ -2199,13 +2283,6 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
 
       {/* Toast Notifications */}
       <ToastContainer />
-
-      {/* Sync Button for clients (when game is playing) */}
-      {!isHost && phase === "playing" && (
-        <div className="fixed bottom-4 right-20 z-40">
-          <SyncButton onSync={requestSync} isSyncing={isSyncing} />
-        </div>
-      )}
 
       {/* Chat Panel */}
       <ChatContainer
