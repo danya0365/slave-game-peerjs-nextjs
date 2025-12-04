@@ -837,9 +837,14 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
   ]);
 
   // Initialize client heartbeat (non-host only) - track connection to host
+  // Only active during "playing" phase to avoid false disconnection during game_end/round_end
   useEffect(() => {
-    // Only non-host players use client heartbeat
-    if (isHost || !gameStarted) return;
+    // Only non-host players use client heartbeat, and only during active play
+    if (isHost || !gameStarted || phase !== "playing") {
+      // Stop heartbeat if conditions not met (e.g., game ended)
+      stopClientHeartbeat();
+      return;
+    }
 
     console.log(
       "[GamePlayView] Starting client heartbeat for host connection tracking"
@@ -878,6 +883,7 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
   }, [
     isHost,
     gameStarted,
+    phase,
     peerId,
     myPlayerId,
     startClientHeartbeat,

@@ -235,8 +235,13 @@ export const useConnectionStore = create<ConnectionStore>((set, get) => ({
     const { clientHeartbeatInterval } = get();
     if (clientHeartbeatInterval) {
       clearInterval(clientHeartbeatInterval);
-      set({ clientHeartbeatInterval: null });
     }
+    // Reset to connected state when stopping (e.g., game ended)
+    set({
+      clientHeartbeatInterval: null,
+      hostConnectionStatus: "connected",
+      lastHostMessageTime: Date.now(),
+    });
   },
 
   // Update when client receives any message from host
