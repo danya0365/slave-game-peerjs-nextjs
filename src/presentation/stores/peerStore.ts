@@ -5,6 +5,7 @@ import type {
   RoomState,
 } from "@/src/domain/types/peer";
 import { PEER_SERVER_CONFIG } from "@/src/infrastructure/config/peer.config";
+import { useConnectionStore } from "@/src/presentation/stores/connectionStore";
 import { useGameStore } from "@/src/presentation/stores/gameStore";
 import Peer, { DataConnection } from "peerjs";
 import { create } from "zustand";
@@ -384,6 +385,13 @@ export const usePeerStore = create<PeerStore>((set, get) => ({
       "from:",
       fromPeerId
     );
+
+    // Client-side: Update last message time from host for connection health tracking
+    // This helps detect when the connection to host becomes stale
+    if (!room?.isHost) {
+      // We're a client receiving a message (presumably from host)
+      useConnectionStore.getState().updateLastHostMessage();
+    }
 
     switch (message.type) {
       case "player_join": {

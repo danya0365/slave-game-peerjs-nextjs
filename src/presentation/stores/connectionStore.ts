@@ -18,10 +18,18 @@ interface ConnectionState {
   // Heartbeat interval ID
   heartbeatInterval: NodeJS.Timeout | null;
 
+  // Client-side heartbeat interval ID (for tracking host connection)
+  clientHeartbeatInterval: NodeJS.Timeout | null;
+
   // Self connection status
   isConnected: boolean;
   isReconnecting: boolean;
   reconnectAttempts: number;
+
+  // Client-side: last time received message from host
+  lastHostMessageTime: number;
+  // Client-side: connection health status
+  hostConnectionStatus: "connected" | "stale" | "disconnected";
 
   // Disconnected players for UI notification
   disconnectedPlayers: { playerId: string; playerName: string }[];
@@ -42,6 +50,15 @@ interface ConnectionActions {
     onPlayerDisconnect: (peerId: string, playerName: string) => void
   ) => void;
   stopHeartbeat: () => void;
+
+  // Client-side heartbeat (track host connection)
+  startClientHeartbeat: (
+    requestSync: () => void,
+    onConnectionStale: () => void
+  ) => void;
+  stopClientHeartbeat: () => void;
+  updateLastHostMessage: () => void;
+  getHostConnectionStatus: () => "connected" | "stale" | "disconnected";
 
   // Track player connection
   registerPlayer: (
@@ -85,13 +102,21 @@ const HEARTBEAT_INTERVAL = 3000; // 3 seconds
 const PING_TIMEOUT = 6000; // 6 seconds (2 missed pings = unstable)
 const DISCONNECT_TIMEOUT = 12000; // 12 seconds (4 missed pings = offline)
 
+// Client-side constants
+const CLIENT_HEARTBEAT_INTERVAL = 2000; // Check every 2 seconds
+const CLIENT_STALE_TIMEOUT = 8000; // 8 seconds without host message = stale
+const CLIENT_DISCONNECT_TIMEOUT = 15000; // 15 seconds = disconnected
+
 export const useConnectionStore = create<ConnectionStore>((set, get) => ({
   // Initial state
   playerConnections: new Map(),
   heartbeatInterval: null,
+  clientHeartbeatInterval: null,
   isConnected: true,
   isReconnecting: false,
   reconnectAttempts: 0,
+  lastHostMessageTime: Date.now(),
+  hostConnectionStatus: "connected",
   disconnectedPlayers: [],
   toasts: [],
 
@@ -160,6 +185,68 @@ export const useConnectionStore = create<ConnectionStore>((set, get) => ({
       clearInterval(heartbeatInterval);
       set({ heartbeatInterval: null });
     }
+  },
+
+  // Client-side heartbeat: track if we're receiving messages from host
+  startClientHeartbeat: (requestSync, onConnectionStale) => {
+    const { clientHeartbeatInterval } = get();
+    if (clientHeartbeatInterval) {
+      clearInterval(clientHeartbeatInterval);
+    }
+
+    // Initialize last message time
+    set({ lastHostMessageTime: Date.now(), hostConnectionStatus: "connected" });
+
+    const interval = setInterval(() => {
+      const { lastHostMessageTime, hostConnectionStatus } = get();
+      const now = Date.now();
+      const timeSinceLastMessage = now - lastHostMessageTime;
+
+      if (timeSinceLastMessage > CLIENT_DISCONNECT_TIMEOUT) {
+        // Disconnected - no messages for too long
+        if (hostConnectionStatus !== "disconnected") {
+          set({ hostConnectionStatus: "disconnected" });
+          get().addToast("error", "หลุดการเชื่อมต่อจาก Host - กรุณา refresh");
+          onConnectionStale();
+        }
+      } else if (timeSinceLastMessage > CLIENT_STALE_TIMEOUT) {
+        // Stale - might have missed some messages
+        if (hostConnectionStatus === "connected") {
+          set({ hostConnectionStatus: "stale" });
+          get().addToast("warning", "การเชื่อมต่อไม่เสถียร - กำลัง sync...");
+          // Request sync from host
+          requestSync();
+        }
+      } else {
+        // Connected
+        if (hostConnectionStatus !== "connected") {
+          set({ hostConnectionStatus: "connected" });
+          if (hostConnectionStatus === "stale") {
+            get().addToast("success", "การเชื่อมต่อกลับมาปกติแล้ว");
+          }
+        }
+      }
+    }, CLIENT_HEARTBEAT_INTERVAL);
+
+    set({ clientHeartbeatInterval: interval });
+  },
+
+  stopClientHeartbeat: () => {
+    const { clientHeartbeatInterval } = get();
+    if (clientHeartbeatInterval) {
+      clearInterval(clientHeartbeatInterval);
+      set({ clientHeartbeatInterval: null });
+    }
+  },
+
+  // Update when client receives any message from host
+  updateLastHostMessage: () => {
+    set({ lastHostMessageTime: Date.now() });
+  },
+
+  // Get current host connection status
+  getHostConnectionStatus: () => {
+    return get().hostConnectionStatus;
   },
 
   // Register player
@@ -272,16 +359,22 @@ export const useConnectionStore = create<ConnectionStore>((set, get) => ({
 
   // Reset all
   reset: () => {
-    const { heartbeatInterval } = get();
+    const { heartbeatInterval, clientHeartbeatInterval } = get();
     if (heartbeatInterval) {
       clearInterval(heartbeatInterval);
+    }
+    if (clientHeartbeatInterval) {
+      clearInterval(clientHeartbeatInterval);
     }
     set({
       playerConnections: new Map(),
       heartbeatInterval: null,
+      clientHeartbeatInterval: null,
       isConnected: true,
       isReconnecting: false,
       reconnectAttempts: 0,
+      lastHostMessageTime: Date.now(),
+      hostConnectionStatus: "connected",
       disconnectedPlayers: [],
       toasts: [],
     });

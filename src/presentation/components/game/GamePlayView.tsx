@@ -149,6 +149,9 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
     disconnectedPlayers,
     startHeartbeat,
     stopHeartbeat,
+    startClientHeartbeat,
+    stopClientHeartbeat,
+    hostConnectionStatus,
     registerPlayer,
     addToast,
     reset: resetConnection,
@@ -759,6 +762,54 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
     startHeartbeat,
     stopHeartbeat,
     broadcastToAll,
+  ]);
+
+  // Initialize client heartbeat (non-host only) - track connection to host
+  useEffect(() => {
+    // Only non-host players use client heartbeat
+    if (isHost || !gameStarted) return;
+
+    console.log(
+      "[GamePlayView] Starting client heartbeat for host connection tracking"
+    );
+
+    // Request sync from host
+    const requestSyncFromHost = () => {
+      const hostConn = usePeerStore.getState().hostConnection;
+      if (hostConn?.open) {
+        console.log(
+          "[GamePlayView] Requesting sync from host due to stale connection"
+        );
+        hostConn.send({
+          type: "sync_request" as const,
+          senderId: peerId!,
+          timestamp: Date.now(),
+          playerId: myPlayerId!,
+        });
+      }
+    };
+
+    // On connection stale/disconnected
+    const onConnectionStale = () => {
+      console.log(
+        "[GamePlayView] Connection to host appears stale/disconnected"
+      );
+      // The toast will be shown by connectionStore
+      // Could add additional logic here like auto-refresh prompt
+    };
+
+    startClientHeartbeat(requestSyncFromHost, onConnectionStale);
+
+    return () => {
+      stopClientHeartbeat();
+    };
+  }, [
+    isHost,
+    gameStarted,
+    peerId,
+    myPlayerId,
+    startClientHeartbeat,
+    stopClientHeartbeat,
   ]);
 
   // Setup onPlayerReconnect callback (host sends resume_game)
@@ -1505,7 +1556,34 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
                   <option value="tavern">🍺 โรงเตี๊ยม</option>
                   <option value="tension">😰 ตึงเครียด</option>
                 </select>
-                <Wifi className="w-4 h-4 text-green-400" />
+                {/* Connection status indicator */}
+                <div
+                  className="flex items-center gap-1"
+                  title={
+                    isHost
+                      ? "Host"
+                      : hostConnectionStatus === "connected"
+                      ? "เชื่อมต่อปกติ"
+                      : hostConnectionStatus === "stale"
+                      ? "การเชื่อมต่อไม่เสถียร"
+                      : "หลุดการเชื่อมต่อ"
+                  }
+                >
+                  {isHost ? (
+                    <Wifi className="w-4 h-4 text-green-400" />
+                  ) : hostConnectionStatus === "connected" ? (
+                    <Wifi className="w-4 h-4 text-green-400" />
+                  ) : hostConnectionStatus === "stale" ? (
+                    <Wifi className="w-4 h-4 text-yellow-400 animate-pulse" />
+                  ) : (
+                    <WifiOff className="w-4 h-4 text-red-400 animate-pulse" />
+                  )}
+                  {!isHost && hostConnectionStatus !== "connected" && (
+                    <span className="text-xs text-yellow-400">
+                      {hostConnectionStatus === "stale" ? "⚠️" : "❌"}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           </div>
