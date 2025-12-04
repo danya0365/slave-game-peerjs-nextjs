@@ -100,6 +100,13 @@ export interface DealCardsMessage extends BaseMessage {
   playerIndex: number;
   startingPlayerIndex: number;
   allHandCounts: number[]; // Card count for each player (so others know hand sizes)
+  // All players including AI (for client to initialize game correctly)
+  allPlayers?: Array<{
+    id: string;
+    name: string;
+    avatar: string;
+    isAI?: boolean;
+  }>;
 }
 
 // Play cards message

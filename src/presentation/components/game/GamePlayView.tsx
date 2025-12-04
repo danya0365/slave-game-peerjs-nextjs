@@ -329,16 +329,30 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
       switch (message.type) {
         case "deal_cards": {
           const dealMsg = message as DealCardsMessage;
-          const { hand, playerIndex, startingPlayerIndex, allHandCounts } =
-            dealMsg;
+          const {
+            hand,
+            playerIndex,
+            startingPlayerIndex,
+            allHandCounts,
+            allPlayers: msgAllPlayers,
+          } = dealMsg;
 
           // Initialize game with players if not already done
           if (phase !== "playing") {
-            const playerInfos = players.map((p) => ({
-              id: p.id,
-              name: p.name,
-              avatar: p.avatar,
-            }));
+            // Use allPlayers from message if available (includes AI players)
+            // Otherwise fallback to local players list
+            const playerInfos = msgAllPlayers
+              ? msgAllPlayers.map((p) => ({
+                  id: p.id,
+                  name: p.name,
+                  avatar: p.avatar,
+                  isAI: p.isAI ?? false,
+                }))
+              : players.map((p) => ({
+                  id: p.id,
+                  name: p.name,
+                  avatar: p.avatar,
+                }));
             initializeGame(playerInfos);
           }
 
@@ -1188,17 +1202,28 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
       }
     }, 3000);
 
+    // Build allPlayers info for clients to initialize game correctly (including AI)
+    const allPlayersInfo = allPlayers.map((p) => ({
+      id: p.id,
+      name: p.name,
+      avatar: p.avatar,
+      isAI: p.isAI ?? false,
+    }));
+
     // Send each player their hand
-    players.forEach((player, index) => {
-      const hand = gameState.players[index]?.hand ?? [];
+    players.forEach((player) => {
+      // Find the actual player index in allPlayers (which includes AI)
+      const actualPlayerIndex = allPlayers.findIndex((p) => p.id === player.id);
+      const hand = gameState.players[actualPlayerIndex]?.hand ?? [];
       const message = {
         type: "deal_cards" as const,
         senderId: peerId!,
         timestamp: Date.now(),
         hand,
-        playerIndex: index,
+        playerIndex: actualPlayerIndex, // Use actual index in full player list
         startingPlayerIndex: gameState.currentPlayerIndex,
         allHandCounts, // Include all hand counts
+        allPlayers: allPlayersInfo, // Include all players (with AI) for client initialization
       };
 
       if (player.peerId === peerId) {
