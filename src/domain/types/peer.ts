@@ -33,6 +33,7 @@ export type MessageType =
   | "play_cards"
   | "pass_turn"
   | "round_end"
+  | "all_passed"
   | "game_end"
   | "new_round"
   | "chat"
@@ -127,6 +128,13 @@ export interface PassTurnMessage extends BaseMessage {
 export interface RoundEndMessage extends BaseMessage {
   type: "round_end";
   winnerId: string; // Player who won the round
+}
+
+// All players passed - table cleared, next player starts fresh
+export interface AllPassedMessage extends BaseMessage {
+  type: "all_passed";
+  nextPlayerId: string; // Player who gets to play next (lastPlayerId from before reset)
+  roundNumber: number;
 }
 
 // Game end message
@@ -248,6 +256,7 @@ export type PeerMessage =
   | PlayCardsMessage
   | PassTurnMessage
   | RoundEndMessage
+  | AllPassedMessage
   | GameEndMessage
   | NewRoundMessage
   | ChatMessage

@@ -437,6 +437,21 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
           applyRemotePlay(playMsg.playerId, playMsg.cards, playMsg.playedHand);
           // Add to history
           addGameAction(playMsg.playerId, "play", playMsg.cards);
+
+          // Host: relay to all other clients (except sender and AI)
+          if (usePeerStore.getState().room?.isHost) {
+            const conns = usePeerStore.getState().connections;
+            conns.forEach((conn, connPeerId) => {
+              // Don't send back to the original sender or AI
+              if (
+                connPeerId !== playMsg.senderId &&
+                !connPeerId.startsWith("ai-peer-") &&
+                conn.open
+              ) {
+                conn.send(playMsg);
+              }
+            });
+          }
           break;
         }
 
@@ -446,6 +461,80 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
           applyRemotePass(passMsg.playerId);
           // Add to history
           addGameAction(passMsg.playerId, "pass");
+
+          // Host: relay to all other clients (except sender) and check all_passed
+          if (usePeerStore.getState().room?.isHost) {
+            // Relay pass to other clients
+            const conns = usePeerStore.getState().connections;
+            conns.forEach((conn, connPeerId) => {
+              if (
+                connPeerId !== passMsg.senderId &&
+                !connPeerId.startsWith("ai-peer-") &&
+                conn.open
+              ) {
+                conn.send(passMsg);
+              }
+            });
+
+            // Check if round was reset (all_passed)
+            const newState = useGameStore.getState();
+            if (newState.currentHand === null) {
+              const nextPlayer = newState.players.find((p) => p.isCurrentTurn);
+              if (nextPlayer) {
+                console.log(
+                  "[GamePlayView] Client pass caused all_passed! Next:",
+                  nextPlayer.name
+                );
+                const allPassedMessage = {
+                  type: "all_passed" as const,
+                  senderId: usePeerStore.getState().peerId!,
+                  timestamp: Date.now(),
+                  nextPlayerId: nextPlayer.id,
+                  roundNumber: newState.roundNumber,
+                };
+                // Broadcast to all clients
+                const conns = usePeerStore.getState().connections;
+                conns.forEach((conn, connPeerId) => {
+                  if (!connPeerId.startsWith("ai-peer-") && conn.open) {
+                    conn.send(allPassedMessage);
+                  }
+                });
+              }
+            }
+          }
+          break;
+        }
+
+        case "all_passed": {
+          // All players passed - round was reset, table cleared
+          const allPassedMsg =
+            message as import("@/src/domain/types/peer").AllPassedMessage;
+          console.log(
+            "[GamePlayView] All passed! Clearing table, next player:",
+            allPassedMsg.nextPlayerId
+          );
+
+          // Update game state to reflect the round reset
+          useGameStore.setState((state) => {
+            const updatedPlayers = state.players.map((p) => ({
+              ...p,
+              hasPassed: false,
+              isCurrentTurn: p.id === allPassedMsg.nextPlayerId,
+            }));
+
+            return {
+              players: updatedPlayers,
+              currentHand: null,
+              discardPile: [],
+              passCount: 0,
+              currentPlayerIndex: updatedPlayers.findIndex(
+                (p) => p.id === allPassedMsg.nextPlayerId
+              ),
+              roundNumber: allPassedMsg.roundNumber,
+            };
+          });
+
+          addSystemAction("round_reset", "🔄 ทุกคนผ่าน - โต๊ะถูกเคลียร์");
           break;
         }
 
@@ -517,10 +606,32 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
           // Host sent us the current game state - apply it!
           const syncMsg =
             message as import("@/src/domain/types/peer").SyncGameStateMessage;
-          console.log(
-            "[GamePlayView] Received sync game state, hand size:",
-            syncMsg.hand?.length
+
+          // Get current local state to compare
+          const currentState = useGameStore.getState();
+          const currentMyPlayer = currentState.players.find(
+            (p) => p.id === myPlayerId
           );
+          const currentHandSize = currentMyPlayer?.hand.length ?? 0;
+          const syncHandSize = syncMsg.hand?.length ?? 0;
+
+          console.log(
+            "[GamePlayView] Received sync_game_state:",
+            "current hand size:",
+            currentHandSize,
+            "sync hand size:",
+            syncHandSize
+          );
+
+          // If local hand is smaller, we might have just played cards locally
+          // Only apply sync if it brings us to a more recent state
+          if (currentHandSize < syncHandSize) {
+            console.log(
+              "[GamePlayView] Skipping sync - local state appears more recent (fewer cards)"
+            );
+            setIsSyncing(false);
+            break;
+          }
 
           // Restore game state similar to resume_game
           useGameStore.setState((state) => {
@@ -1166,8 +1277,8 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
             // Add to game history
             addGameAction(currentPlayer.id, "pass");
 
-            // Broadcast to other players (non-AI only)
-            const message = {
+            // Broadcast pass to other players (non-AI only)
+            const passMessage = {
               type: "pass_turn" as const,
               senderId: peerId!,
               timestamp: Date.now(),
@@ -1176,9 +1287,35 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
 
             connections.forEach((conn, connPeerId) => {
               if (!connPeerId.startsWith("ai-peer-") && conn.open) {
-                conn.send(message);
+                conn.send(passMessage);
               }
             });
+
+            // Check if round was reset (all players passed)
+            const newState = useGameStore.getState();
+            if (newState.currentHand === null) {
+              // Round was reset - broadcast all_passed to sync clients
+              const nextPlayer = newState.players.find((p) => p.isCurrentTurn);
+              if (nextPlayer) {
+                console.log(
+                  "[GamePlayView] All passed! Broadcasting round reset, next:",
+                  nextPlayer.name
+                );
+                const allPassedMessage = {
+                  type: "all_passed" as const,
+                  senderId: peerId!,
+                  timestamp: Date.now(),
+                  nextPlayerId: nextPlayer.id,
+                  roundNumber: newState.roundNumber,
+                };
+
+                connections.forEach((conn, connPeerId) => {
+                  if (!connPeerId.startsWith("ai-peer-") && conn.open) {
+                    conn.send(allPassedMessage);
+                  }
+                });
+              }
+            }
           }
         } else {
           // AI tried to pass but can't (fresh round) - force play lowest card
@@ -1406,8 +1543,22 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
     const playedHand = createPlayedHand(selectedCards, myPlayerId);
     if (!playedHand) return;
 
+    console.log(
+      "[GamePlayView] handlePlay - Before play, hand size:",
+      useGameStore.getState().players.find((p) => p.id === myPlayerId)?.hand
+        .length
+    );
+
     // Execute play
     const success = gamePlayCards(myPlayerId, selectedCards);
+    console.log(
+      "[GamePlayView] handlePlay - After playCards, success:",
+      success,
+      "new hand size:",
+      useGameStore.getState().players.find((p) => p.id === myPlayerId)?.hand
+        .length
+    );
+
     if (success) {
       playCardPlay(); // Play card sound
       // Add to game history
@@ -1450,7 +1601,7 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
       // Add to game history
       addGameAction(myPlayerId, "pass");
 
-      const message = {
+      const passMessage = {
         type: "pass_turn" as const,
         senderId: peerId!,
         timestamp: Date.now(),
@@ -1459,12 +1610,33 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
 
       if (isHost) {
         // Host broadcasts to all clients
-        broadcastToAll(message);
+        broadcastToAll(passMessage);
+
+        // Check if round was reset (all players passed)
+        const newState = useGameStore.getState();
+        if (newState.currentHand === null) {
+          // Round was reset - broadcast all_passed to sync clients
+          const nextPlayer = newState.players.find((p) => p.isCurrentTurn);
+          if (nextPlayer) {
+            console.log(
+              "[GamePlayView] Host pass caused all_passed! Next:",
+              nextPlayer.name
+            );
+            const allPassedMessage = {
+              type: "all_passed" as const,
+              senderId: peerId!,
+              timestamp: Date.now(),
+              nextPlayerId: nextPlayer.id,
+              roundNumber: newState.roundNumber,
+            };
+            broadcastToAll(allPassedMessage);
+          }
+        }
       } else {
         // Client sends to host (host will relay to others)
         const hostConnection = usePeerStore.getState().hostConnection;
         if (hostConnection?.open) {
-          hostConnection.send(message);
+          hostConnection.send(passMessage);
         }
       }
     }
