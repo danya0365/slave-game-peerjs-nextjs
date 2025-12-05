@@ -1,7 +1,10 @@
 "use client";
 
 import type { Card } from "@/src/domain/types/card";
+import type { PlayerConnectionStatus } from "@/src/domain/types/peer";
 import { cn } from "@/src/lib/utils";
+import { AlertCircle, Wifi, WifiOff } from "lucide-react";
+import { useState } from "react";
 import { CardComponent } from "./CardComponent";
 
 interface PlayerHandProps {
@@ -116,6 +119,12 @@ interface OpponentHandProps {
   hasPassed: boolean;
   finishOrder: number | null; // 1 = King, 2 = Noble, 3 = Commoner, 4 = Slave
   position: "top" | "left" | "right";
+  // Connection status
+  isHost?: boolean; // Is current user the host
+  isAI?: boolean; // Is this player an AI
+  isThisPlayerHost?: boolean; // Is this opponent the host player
+  connectionStatus?: PlayerConnectionStatus;
+  lastPingTime?: number;
 }
 
 // Get rank display based on finish order
@@ -146,7 +155,53 @@ export function OpponentHand({
   hasPassed,
   finishOrder,
   position,
+  isHost = false,
+  isAI = false,
+  isThisPlayerHost = false,
+  connectionStatus = "online",
+  lastPingTime,
 }: OpponentHandProps) {
+  const [showConnectionDetails, setShowConnectionDetails] = useState(false);
+
+  // Get connection indicator display
+  // - Host sees connection status of all non-AI players
+  // - Non-host sees their connection to the host (on host's player card)
+  const getConnectionIndicator = () => {
+    // Skip for AI players
+    if (isAI) return null;
+
+    // Host sees all players' connection status
+    // Non-host sees only the host player's status (their connection to host)
+    if (!isHost && !isThisPlayerHost) return null;
+
+    switch (connectionStatus) {
+      case "online":
+        return {
+          icon: Wifi,
+          color: "text-green-400",
+          bgColor: "bg-green-500/20",
+          label: isHost ? "เชื่อมต่อปกติ" : "เชื่อมต่อกับ Host ปกติ",
+        };
+      case "unstable":
+        return {
+          icon: AlertCircle,
+          color: "text-yellow-400",
+          bgColor: "bg-yellow-500/20",
+          label: isHost ? "สัญญาณไม่เสถียร" : "สัญญาณกับ Host ไม่เสถียร",
+        };
+      case "offline":
+        return {
+          icon: WifiOff,
+          color: "text-red-400",
+          bgColor: "bg-red-500/20",
+          label: isHost ? "หลุดการเชื่อมต่อ" : "หลุดการเชื่อมต่อกับ Host",
+        };
+      default:
+        return null;
+    }
+  };
+
+  const connectionIndicator = getConnectionIndicator();
   // Layout based on position - more compact on mobile
   const containerClass = cn(
     "flex items-center gap-1 md:gap-2",
@@ -164,15 +219,69 @@ export function OpponentHand({
   // Show fewer card backs on mobile
   const displayCount = Math.min(cardCount, 3);
 
+  // Format last ping time
+  const getLastPingText = () => {
+    if (!lastPingTime) return "";
+    const seconds = Math.floor((Date.now() - lastPingTime) / 1000);
+    if (seconds < 5) return "เมื่อกี้";
+    if (seconds < 60) return `${seconds} วินาทีก่อน`;
+    return `${Math.floor(seconds / 60)} นาทีก่อน`;
+  };
+
   return (
     <div className={containerClass}>
       {/* Player info - compact on mobile */}
       <div
         className={cn(
-          "flex flex-col items-center gap-0.5 p-1 md:p-2 rounded-lg",
+          "flex flex-col items-center gap-0.5 p-1 md:p-2 rounded-lg relative",
           isCurrentTurn && "bg-yellow-500/20 ring-1 md:ring-2 ring-yellow-500"
         )}
       >
+        {/* Connection status indicator (host only, non-AI) */}
+        {connectionIndicator && (
+          <button
+            onClick={() => setShowConnectionDetails(!showConnectionDetails)}
+            className={cn(
+              "absolute -top-1 -right-1 p-0.5 rounded-full",
+              connectionIndicator.bgColor,
+              "hover:scale-110 transition-transform"
+            )}
+            title={connectionIndicator.label}
+          >
+            <connectionIndicator.icon
+              className={cn("w-3 h-3", connectionIndicator.color)}
+            />
+          </button>
+        )}
+
+        {/* Connection details popup */}
+        {showConnectionDetails && connectionIndicator && (
+          <div
+            className={cn(
+              "absolute z-50 top-full mt-1 p-2 rounded-lg bg-gray-800 border border-gray-700 shadow-lg",
+              "min-w-[120px] text-left"
+            )}
+            onClick={() => setShowConnectionDetails(false)}
+          >
+            <div className="flex items-center gap-1.5 mb-1">
+              <connectionIndicator.icon
+                className={cn("w-4 h-4", connectionIndicator.color)}
+              />
+              <span
+                className={cn("text-xs font-medium", connectionIndicator.color)}
+              >
+                {connectionIndicator.label}
+              </span>
+            </div>
+            {lastPingTime && (
+              <div className="text-[10px] text-gray-400">
+                Ping: {getLastPingText()}
+              </div>
+            )}
+            <div className="text-[10px] text-gray-500 mt-1">แตะเพื่อปิด</div>
+          </div>
+        )}
+
         <div className="text-xl md:text-2xl">{avatar}</div>
         <div className="text-white text-[10px] md:text-xs font-medium text-center truncate max-w-14 md:max-w-20">
           {playerName}

@@ -152,7 +152,49 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
     registerPlayer,
     addToast,
     reset: resetConnection,
+    playerConnections,
   } = useConnectionStore();
+
+  // Helper to get connection status for a player
+  const getPlayerConnectionStatus = useCallback(
+    (playerId: string, playerIsHost?: boolean) => {
+      if (isHost) {
+        // Host sees connection status of all players
+        for (const [, conn] of playerConnections) {
+          if (conn.playerId === playerId) {
+            return { status: conn.status, lastPingTime: conn.lastPingTime };
+          }
+        }
+        return { status: "online" as const, lastPingTime: undefined };
+      } else {
+        // Non-host sees their connection to host on the host's player card
+        if (playerIsHost) {
+          // Map hostConnectionStatus to PlayerConnectionStatus
+          const statusMap: Record<string, "online" | "unstable" | "offline"> = {
+            connected: "online",
+            stale: "unstable",
+            disconnected: "offline",
+          };
+          return {
+            status: statusMap[hostConnectionStatus] || "online",
+            lastPingTime: undefined,
+          };
+        }
+        // For other non-AI players, we don't have direct connection info
+        return { status: "online" as const, lastPingTime: undefined };
+      }
+    },
+    [isHost, playerConnections, hostConnectionStatus]
+  );
+
+  // Check if a player is the host
+  const isPlayerHost = useCallback((playerId: string) => {
+    // The host is the first player in the room (room creator)
+    const room = usePeerStore.getState().room;
+    if (!room?.players || room.players.length === 0) return false;
+    // First player is always the host
+    return room.players[0]?.id === playerId;
+  }, []);
 
   // Get my player info
   const myPlayerId = user?.id;
@@ -1883,6 +1925,21 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
                 hasPassed={topPlayer.hasPassed}
                 finishOrder={topPlayer.finishOrder}
                 position="top"
+                isHost={isHost}
+                isAI={topPlayer.isAI}
+                connectionStatus={
+                  getPlayerConnectionStatus(
+                    topPlayer.id,
+                    isPlayerHost(topPlayer.id)
+                  ).status
+                }
+                lastPingTime={
+                  getPlayerConnectionStatus(
+                    topPlayer.id,
+                    isPlayerHost(topPlayer.id)
+                  ).lastPingTime
+                }
+                isThisPlayerHost={isPlayerHost(topPlayer.id)}
               />
             </div>
           )}
@@ -1898,6 +1955,21 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
                 hasPassed={leftPlayer.hasPassed}
                 finishOrder={leftPlayer.finishOrder}
                 position="left"
+                isHost={isHost}
+                isAI={leftPlayer.isAI}
+                connectionStatus={
+                  getPlayerConnectionStatus(
+                    leftPlayer.id,
+                    isPlayerHost(leftPlayer.id)
+                  ).status
+                }
+                lastPingTime={
+                  getPlayerConnectionStatus(
+                    leftPlayer.id,
+                    isPlayerHost(leftPlayer.id)
+                  ).lastPingTime
+                }
+                isThisPlayerHost={isPlayerHost(leftPlayer.id)}
               />
             </div>
           )}
@@ -1913,6 +1985,21 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
                 hasPassed={rightPlayer.hasPassed}
                 finishOrder={rightPlayer.finishOrder}
                 position="right"
+                isHost={isHost}
+                isAI={rightPlayer.isAI}
+                connectionStatus={
+                  getPlayerConnectionStatus(
+                    rightPlayer.id,
+                    isPlayerHost(rightPlayer.id)
+                  ).status
+                }
+                lastPingTime={
+                  getPlayerConnectionStatus(
+                    rightPlayer.id,
+                    isPlayerHost(rightPlayer.id)
+                  ).lastPingTime
+                }
+                isThisPlayerHost={isPlayerHost(rightPlayer.id)}
               />
             </div>
           )}

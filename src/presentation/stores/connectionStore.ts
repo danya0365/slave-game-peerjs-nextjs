@@ -256,6 +256,11 @@ export const useConnectionStore = create<ConnectionStore>((set, get) => ({
 
   // Register player
   registerPlayer: (peerId, playerId, playerName) => {
+    console.log("[ConnectionStore] Registering player:", {
+      peerId,
+      playerId,
+      playerName,
+    });
     set((state) => {
       const updated = new Map(state.playerConnections);
       updated.set(peerId, {
@@ -281,9 +286,11 @@ export const useConnectionStore = create<ConnectionStore>((set, get) => ({
 
   // Update player ping (called when pong received)
   updatePlayerPing: (peerId) => {
+    console.log("[ConnectionStore] updatePlayerPing called for:", peerId);
     set((state) => {
       const updated = new Map(state.playerConnections);
       const conn = updated.get(peerId);
+      console.log("[ConnectionStore] Found connection:", conn ? "yes" : "no");
       if (conn) {
         const wasOffline = conn.status === "offline";
         updated.set(peerId, {

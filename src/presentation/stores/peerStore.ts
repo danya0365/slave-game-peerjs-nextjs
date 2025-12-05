@@ -743,6 +743,7 @@ export const usePeerStore = create<PeerStore>((set, get) => ({
       // Ping/Pong for connection health
       case "ping": {
         // Respond with pong
+        console.log("[PeerJS] Ping received from:", fromPeerId);
         const { room, connections, hostConnection, peerId } = get();
         const pongMessage: PeerMessage = {
           type: "pong",
@@ -755,18 +756,20 @@ export const usePeerStore = create<PeerStore>((set, get) => ({
           const conn = connections.get(fromPeerId);
           if (conn?.open) {
             conn.send(pongMessage);
+            console.log("[PeerJS] Host sent pong to:", fromPeerId);
           }
         } else if (hostConnection?.open) {
           // Client sends pong back to host
           hostConnection.send(pongMessage);
+          console.log("[PeerJS] Client sent pong to host");
         }
         break;
       }
 
       case "pong": {
-        // Connection health update handled by connectionStore
-        // This is just acknowledged - actual tracking is done externally
+        // Update player connection status when pong is received
         console.log("[PeerJS] Pong received from:", fromPeerId);
+        useConnectionStore.getState().updatePlayerPing(fromPeerId);
         break;
       }
 
