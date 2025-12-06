@@ -96,6 +96,13 @@ const generateClientPeerId = (): string => {
     .substring(2, 8)}`;
 };
 
+/**
+ * Module-level tracking for room creation to prevent React Strict Mode double initialization
+ * This persists across component re-renders and Strict Mode cleanup cycles
+ */
+const roomCreationInProgress = new Map<string, number>(); // roomCode -> timestamp
+const ROOM_CREATION_COOLDOWN = 2000; // 2 seconds cooldown
+
 export const usePeerStore = create<PeerStore>((set, get) => ({
   // Initial state
   peer: null,
@@ -220,17 +227,62 @@ export const usePeerStore = create<PeerStore>((set, get) => ({
 
   // Create a room (as host)
   createRoom: (roomCode: string, player: PeerPlayer, retryCount = 0) => {
+    const { peer, peerId, connectionStatus } = get();
+    const hostPeerId = getHostPeerId(roomCode);
+
+    // Check module-level cooldown to prevent React Strict Mode double initialization
+    const lastCreationTime = roomCreationInProgress.get(roomCode);
+    const now = Date.now();
+    if (
+      lastCreationTime &&
+      now - lastCreationTime < ROOM_CREATION_COOLDOWN &&
+      retryCount === 0
+    ) {
+      console.log(
+        "[PeerJS] Room creation in cooldown, skipping duplicate call for:",
+        roomCode
+      );
+      return;
+    }
+
+    // If we already have a valid peer with the correct ID, reuse it
+    if (
+      peer &&
+      !peer.destroyed &&
+      peerId === hostPeerId &&
+      connectionStatus === "connected"
+    ) {
+      console.log("[PeerJS] Reusing existing host connection:", peerId);
+      return;
+    }
+
+    // If we're already initializing with the same room, skip (but not for retries)
+    if (connectionStatus === "initializing" && retryCount === 0) {
+      console.log(
+        "[PeerJS] Already initializing, skipping duplicate createRoom call"
+      );
+      return;
+    }
+
+    // Mark room creation as in progress
+    roomCreationInProgress.set(roomCode, now);
+
     const { cleanup } = get();
 
-    // Cleanup any existing connection
-    cleanup();
+    // Cleanup any existing connection (but only if not a retry)
+    if (retryCount === 0) {
+      cleanup();
+    }
 
     set({ connectionStatus: "initializing", error: null });
 
-    const hostPeerId = getHostPeerId(roomCode);
-
     // Add small delay after cleanup to let PeerJS server release the ID
     const createPeer = () => {
+      // Double check we're still in initializing state (prevent race conditions)
+      if (get().connectionStatus !== "initializing") {
+        console.log("[PeerJS] State changed, aborting createPeer");
+        return;
+      }
       const newPeer = new Peer(hostPeerId, {
         ...PEER_SERVER_CONFIG,
         debug: 2,
@@ -238,6 +290,9 @@ export const usePeerStore = create<PeerStore>((set, get) => ({
 
       newPeer.on("open", (id) => {
         console.log("[PeerJS] Host connected with ID:", id);
+
+        // Clear the cooldown now that connection is established
+        roomCreationInProgress.delete(roomCode);
 
         const hostPlayer: PeerPlayer = {
           ...player,
@@ -297,8 +352,9 @@ export const usePeerStore = create<PeerStore>((set, get) => ({
     if (retryCount > 0) {
       createPeer();
     } else {
-      // First attempt: small delay to ensure cleanup is complete
-      setTimeout(createPeer, 100);
+      // First attempt: longer delay to ensure cleanup is complete
+      // PeerJS server needs time to release the ID
+      setTimeout(createPeer, 300);
     }
   },
 
@@ -922,7 +978,20 @@ export const usePeerStore = create<PeerStore>((set, get) => ({
 
   // Cleanup everything
   cleanup: () => {
-    const { peer, connections, hostConnection } = get();
+    const { peer, connections, hostConnection, room } = get();
+
+    // Check if any room creation is in cooldown - if so, don't cleanup
+    // This prevents React Strict Mode from destroying the peer during initialization
+    const now = Date.now();
+    for (const [roomCode, timestamp] of roomCreationInProgress.entries()) {
+      if (now - timestamp < ROOM_CREATION_COOLDOWN) {
+        console.log(
+          "[PeerJS] Cleanup skipped - room creation in cooldown for:",
+          roomCode
+        );
+        return;
+      }
+    }
 
     // Close all connections
     connections.forEach((conn) => conn.close());
@@ -933,6 +1002,11 @@ export const usePeerStore = create<PeerStore>((set, get) => ({
 
     if (peer) {
       peer.destroy();
+    }
+
+    // Clear the cooldown tracking for the current room
+    if (room?.roomCode) {
+      roomCreationInProgress.delete(room.roomCode);
     }
 
     set({

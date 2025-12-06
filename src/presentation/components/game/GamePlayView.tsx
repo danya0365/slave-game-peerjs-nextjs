@@ -127,7 +127,6 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
 
   // Local state
   const [copied, setCopied] = useState(false);
-  const [isConnecting, setIsConnecting] = useState(false);
   const [selectedCards, setSelectedCards] = useState<Card[]>([]);
   const [gameStarted, setGameStarted] = useState(false);
   const [roomNotFound, setRoomNotFound] = useState(false);
@@ -313,12 +312,11 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
 
   // Initialize P2P connection
   useEffect(() => {
-    if (!user || !hasHydrated || isConnecting) return;
+    if (!user || !hasHydrated) return;
 
     let timeoutId: NodeJS.Timeout | null = null;
 
     const initConnection = async () => {
-      setIsConnecting(true);
       setRoomNotFound(false);
       setConnectionTimeout(false);
 
@@ -358,10 +356,20 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
 
     return () => {
       if (timeoutId) clearTimeout(timeoutId);
-      cleanup();
+      // Only cleanup on actual unmount, not on Strict Mode re-render
+      // The cleanup will be handled by the component unmount in production
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, hasHydrated, roomCode, isHostParam]);
+
+  // Cleanup on actual unmount
+  useEffect(() => {
+    return () => {
+      console.log("[GamePlayView] Component unmounting, cleaning up peer");
+      cleanup();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Register game message handler
   useEffect(() => {
