@@ -55,7 +55,11 @@ interface PeerActions {
   setRoomStatus: (status: "waiting" | "ready" | "playing" | "finished") => void;
 
   // Host actions
-  createRoom: (roomCode: string, player: PeerPlayer) => void;
+  createRoom: (
+    roomCode: string,
+    player: PeerPlayer,
+    retryCount?: number
+  ) => void;
   handleIncomingConnection: (conn: DataConnection) => void;
 
   // Client actions
@@ -215,8 +219,8 @@ export const usePeerStore = create<PeerStore>((set, get) => ({
   },
 
   // Create a room (as host)
-  createRoom: (roomCode: string, player: PeerPlayer) => {
-    const { peer, cleanup } = get();
+  createRoom: (roomCode: string, player: PeerPlayer, retryCount = 0) => {
+    const { cleanup } = get();
 
     // Cleanup any existing connection
     cleanup();
@@ -225,65 +229,83 @@ export const usePeerStore = create<PeerStore>((set, get) => ({
 
     const hostPeerId = getHostPeerId(roomCode);
 
-    const newPeer = new Peer(hostPeerId, {
-      ...PEER_SERVER_CONFIG,
-      debug: 2,
-    });
-
-    newPeer.on("open", (id) => {
-      console.log("[PeerJS] Host connected with ID:", id);
-
-      const hostPlayer: PeerPlayer = {
-        ...player,
-        peerId: id,
-        isHost: true,
-      };
-
-      const room: RoomState = {
-        roomCode,
-        players: [hostPlayer],
-        isHost: true,
-        hostPeerId: id,
-        status: "waiting",
-      };
-
-      set({
-        peer: newPeer,
-        peerId: id,
-        connectionStatus: "connected",
-        room,
+    // Add small delay after cleanup to let PeerJS server release the ID
+    const createPeer = () => {
+      const newPeer = new Peer(hostPeerId, {
+        ...PEER_SERVER_CONFIG,
+        debug: 2,
       });
-    });
 
-    newPeer.on("error", (err) => {
-      console.error("[PeerJS] Host error:", err);
+      newPeer.on("open", (id) => {
+        console.log("[PeerJS] Host connected with ID:", id);
 
-      // Check if the error is because the room already exists
-      if (err.type === "unavailable-id") {
+        const hostPlayer: PeerPlayer = {
+          ...player,
+          peerId: id,
+          isHost: true,
+        };
+
+        const room: RoomState = {
+          roomCode,
+          players: [hostPlayer],
+          isHost: true,
+          hostPeerId: id,
+          status: "waiting",
+        };
+
         set({
-          connectionStatus: "error",
-          error: "รหัสห้องนี้มีคนใช้แล้ว กรุณาสร้างรหัสใหม่",
+          peer: newPeer,
+          peerId: id,
+          connectionStatus: "connected",
+          room,
         });
-      } else {
-        set({ connectionStatus: "error", error: err.message });
-      }
-    });
+      });
 
-    newPeer.on("connection", (conn) => {
-      console.log("[PeerJS] Incoming connection from:", conn.peer);
-      get().handleIncomingConnection(conn);
-    });
+      newPeer.on("error", (err) => {
+        console.error("[PeerJS] Host error:", err);
 
-    newPeer.on("disconnected", () => {
-      console.log("[PeerJS] Host disconnected");
-      set({ connectionStatus: "disconnected" });
-    });
+        // Check if the error is because the ID is taken (stale from previous session)
+        if (err.type === "unavailable-id" && retryCount < 3) {
+          console.log(`[PeerJS] ID taken, retrying... (${retryCount + 1}/3)`);
+          newPeer.destroy();
+          // Wait longer and retry
+          setTimeout(() => {
+            get().createRoom(roomCode, player, retryCount + 1);
+          }, 1000 * (retryCount + 1)); // Exponential backoff: 1s, 2s, 3s
+        } else if (err.type === "unavailable-id") {
+          set({
+            connectionStatus: "error",
+            error: "รหัสห้องนี้มีคนใช้แล้ว กรุณาสร้างรหัสใหม่",
+          });
+        } else {
+          set({ connectionStatus: "error", error: err.message });
+        }
+      });
+
+      newPeer.on("connection", (conn) => {
+        console.log("[PeerJS] Incoming connection from:", conn.peer);
+        get().handleIncomingConnection(conn);
+      });
+
+      newPeer.on("disconnected", () => {
+        console.log("[PeerJS] Host disconnected");
+        set({ connectionStatus: "disconnected" });
+      });
+    };
+
+    // If this is a retry, wait before creating new peer
+    if (retryCount > 0) {
+      createPeer();
+    } else {
+      // First attempt: small delay to ensure cleanup is complete
+      setTimeout(createPeer, 100);
+    }
   },
 
   // Join a room (as client)
   joinRoom: async (roomCode: string, player: PeerPlayer) => {
     return new Promise((resolve) => {
-      const { peer, cleanup } = get();
+      const { cleanup } = get();
 
       // Cleanup any existing connection
       cleanup();
@@ -337,10 +359,11 @@ export const usePeerStore = create<PeerStore>((set, get) => ({
 
         conn.on("close", () => {
           console.log("[PeerJS] Disconnected from host");
+          // Keep room info so ConnectionLostModal can show
           set({
             connectionStatus: "disconnected",
             hostConnection: null,
-            room: null,
+            error: "Host ออกจากห้องแล้ว",
           });
         });
 

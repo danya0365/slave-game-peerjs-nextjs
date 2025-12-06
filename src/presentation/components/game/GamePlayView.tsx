@@ -68,7 +68,7 @@ const EMPTY_PLAYERS: never[] = [];
 export function GamePlayView({ roomCode }: GamePlayViewProps) {
   const searchParams = useSearchParams();
   const isHostParam = searchParams.get("host") === "true";
-  const { user, hasHydrated } = useUserStore();
+  const { user, hasHydrated, updateGameResult } = useUserStore();
 
   // Peer store
   const {
@@ -893,12 +893,34 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
     setPrevRoundNumber(roundNumber);
   }, [roundNumber, prevRoundNumber, phase, gamePlayers, addGameAction]);
 
-  // Track game end
+  // Track game end and update player stats
+  const hasUpdatedStats = useRef(false);
   useEffect(() => {
     if (phase === "game_end") {
       addSystemAction("game_end", "🎊 เกมจบแล้ว! ดูผลคะแนน");
+
+      // Update user stats with their final rank (only once per game)
+      if (!hasUpdatedStats.current && myPlayerId) {
+        const myFinalPlayer = gamePlayers.find((p) => p.id === myPlayerId);
+        if (myFinalPlayer?.finishOrder) {
+          const finishOrder = myFinalPlayer.finishOrder as 1 | 2 | 3 | 4;
+          updateGameResult(finishOrder);
+          hasUpdatedStats.current = true;
+          console.log(
+            "[GamePlayView] Updated stats with finishOrder:",
+            finishOrder
+          );
+        }
+      }
     }
-  }, [phase, addSystemAction]);
+  }, [phase, addSystemAction, myPlayerId, gamePlayers, updateGameResult]);
+
+  // Reset stats tracking when starting new game
+  useEffect(() => {
+    if (phase === "dealing") {
+      hasUpdatedStats.current = false;
+    }
+  }, [phase]);
 
   // Track turn changes (skip first turn as it's logged in deal_cards)
   const [prevTurnPlayerId, setPrevTurnPlayerId] = useState<string | null>(null);

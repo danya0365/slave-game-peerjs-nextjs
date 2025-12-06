@@ -197,13 +197,19 @@ export function ConnectionLostModal() {
 
         {/* Title */}
         <h2 className="text-xl font-bold text-white text-center mb-2">
-          {isReconnecting ? "กำลังเชื่อมต่อใหม่..." : "ขาดการเชื่อมต่อ"}
+          {isReconnecting
+            ? "กำลังเชื่อมต่อใหม่..."
+            : error?.includes("Host ออก")
+            ? "เกมจบลง"
+            : "ขาดการเชื่อมต่อ"}
         </h2>
 
         {/* Message */}
         <p className="text-gray-400 text-center mb-6">
           {isReconnecting
             ? `พยายามเชื่อมต่อครั้งที่ ${reconnectAttempts} จาก ${maxReconnectAttempts}`
+            : error?.includes("Host ออก")
+            ? "Host ได้ออกจากห้องแล้ว เกมถูกยกเลิก"
             : error || "การเชื่อมต่อกับห้องถูกตัด กรุณาลองเชื่อมต่อใหม่"}
         </p>
 
@@ -223,7 +229,8 @@ export function ConnectionLostModal() {
 
         {/* Actions */}
         <div className="flex flex-col gap-3">
-          {canReconnect && !isReconnecting && (
+          {/* Don't show reconnect button if host left */}
+          {canReconnect && !isReconnecting && !error?.includes("Host ออก") && (
             <button
               onClick={attemptReconnect}
               className="w-full py-3 rounded-xl bg-blue-500 hover:bg-blue-600 text-white font-semibold transition-colors flex items-center justify-center gap-2"
@@ -235,14 +242,14 @@ export function ConnectionLostModal() {
 
           <a
             href="/lobby"
-            className="w-full py-3 rounded-xl bg-gray-700 hover:bg-gray-600 text-white font-semibold transition-colors text-center"
+            className="w-full py-3 rounded-xl bg-green-600 hover:bg-green-700 text-white font-semibold transition-colors text-center"
           >
             กลับห้องรอ
           </a>
         </div>
 
         {/* Tip */}
-        {!canReconnect && !isReconnecting && (
+        {!canReconnect && !isReconnecting && !error?.includes("Host ออก") && (
           <p className="text-yellow-400 text-sm text-center mt-4">
             ไม่สามารถเชื่อมต่อใหม่ได้ กรุณากลับไปห้องรอ
           </p>

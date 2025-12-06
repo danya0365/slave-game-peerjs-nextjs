@@ -19,7 +19,21 @@ export interface UserStats {
   gamesLost: number;
   winStreak: number;
   bestWinStreak: number;
+  // Detailed rank stats for Slave game
+  kingCount: number; // เจ้า (1st place)
+  nobleCount: number; // ขุน (2nd place)
+  commonerCount: number; // ไพร่ (3rd place)
+  slaveCount: number; // ทาส (4th place)
 }
+
+// Game finish rank type
+export type GameRank = 1 | 2 | 3 | 4;
+export const RANK_NAMES: Record<GameRank, string> = {
+  1: "เจ้า",
+  2: "ขุน",
+  3: "ไพร่",
+  4: "ทาส",
+};
 
 interface UserState {
   user: User | null;
@@ -31,6 +45,7 @@ interface UserActions {
   createUser: (name: string, avatar?: string) => void;
   updateUser: (updates: Partial<Pick<User, "name" | "avatar">>) => void;
   updateStats: (result: "win" | "loss") => void;
+  updateGameResult: (finishOrder: GameRank) => void; // New: update with detailed rank
   resetStats: () => void;
   deleteUser: () => void;
   setHasHydrated: (state: boolean) => void;
@@ -82,6 +97,10 @@ const defaultStats: UserStats = {
   gamesLost: 0,
   winStreak: 0,
   bestWinStreak: 0,
+  kingCount: 0,
+  nobleCount: 0,
+  commonerCount: 0,
+  slaveCount: 0,
 };
 
 /**
@@ -153,6 +172,61 @@ export const useUserStore = create<UserStore>()(
         } else {
           newStats.gamesLost += 1;
           newStats.winStreak = 0;
+        }
+
+        set({
+          user: {
+            ...currentUser,
+            stats: newStats,
+          },
+        });
+      },
+
+      // Update game result with detailed rank (1=King, 2=Noble, 3=Commoner, 4=Slave)
+      updateGameResult: (finishOrder: GameRank) => {
+        const currentUser = get().user;
+        if (!currentUser) return;
+
+        const newStats = {
+          ...currentUser.stats,
+          // Ensure backward compatibility with old stats that don't have rank fields
+          kingCount: currentUser.stats.kingCount ?? 0,
+          nobleCount: currentUser.stats.nobleCount ?? 0,
+          commonerCount: currentUser.stats.commonerCount ?? 0,
+          slaveCount: currentUser.stats.slaveCount ?? 0,
+        };
+
+        newStats.gamesPlayed += 1;
+
+        // Update rank-specific counter
+        switch (finishOrder) {
+          case 1: // King (เจ้า)
+            newStats.kingCount += 1;
+            newStats.gamesWon += 1;
+            newStats.winStreak += 1;
+            if (newStats.winStreak > newStats.bestWinStreak) {
+              newStats.bestWinStreak = newStats.winStreak;
+            }
+            break;
+          case 2: // Noble (ขุน)
+            newStats.nobleCount += 1;
+            // Noble is considered a "win" for win streak
+            newStats.gamesWon += 1;
+            newStats.winStreak += 1;
+            if (newStats.winStreak > newStats.bestWinStreak) {
+              newStats.bestWinStreak = newStats.winStreak;
+            }
+            break;
+          case 3: // Commoner (ไพร่)
+            newStats.commonerCount += 1;
+            // Commoner breaks win streak but not counted as loss
+            newStats.winStreak = 0;
+            break;
+          case 4: // Slave (ทาส)
+            newStats.slaveCount += 1;
+            newStats.gamesLost += 1;
+            newStats.winStreak = 0;
+            break;
         }
 
         set({
