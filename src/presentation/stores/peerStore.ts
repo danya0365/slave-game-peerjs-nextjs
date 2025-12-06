@@ -194,7 +194,7 @@ export const usePeerStore = create<PeerStore>((set, get) => ({
     });
 
     conn.on("data", (data) => {
-      console.log("[PeerJS] Received data:", data);
+      //console.log("[PeerJS] Received data:", data);
       get().handleMessage(data as PeerMessage, conn.peer);
     });
 
@@ -409,7 +409,7 @@ export const usePeerStore = create<PeerStore>((set, get) => ({
         });
 
         conn.on("data", (data) => {
-          console.log("[PeerJS] Received from host:", data);
+          //console.log("[PeerJS] Received from host:", data);
           get().handleMessage(data as PeerMessage, hostPeerId);
         });
 
@@ -458,13 +458,6 @@ export const usePeerStore = create<PeerStore>((set, get) => ({
   handleMessage: (message: PeerMessage, fromPeerId: string) => {
     const { room, peerId, connections } = get();
 
-    console.log(
-      "[PeerJS] Handling message:",
-      message.type,
-      "from:",
-      fromPeerId
-    );
-
     // Client-side: Update last message time from host for connection health tracking
     // This helps detect when the connection to host becomes stale
     if (!room?.isHost) {
@@ -506,10 +499,6 @@ export const usePeerStore = create<PeerStore>((set, get) => ({
           );
 
           if (gamePlayerIndex >= 0) {
-            console.log(
-              "[PeerJS] Player found in gameStore but not peerStore:",
-              newPlayer.name
-            );
             foundInGameStore = true;
             existingPlayerIndex = gamePlayerIndex;
             // Create existingPlayer from gameStore data
@@ -526,25 +515,8 @@ export const usePeerStore = create<PeerStore>((set, get) => ({
           }
         }
 
-        console.log("[PeerJS] player_join check:", {
-          existingPlayer: !!existingPlayer,
-          existingPlayerId: existingPlayer?.id,
-          newPlayerId: newPlayer.id,
-          newPlayerName: newPlayer.name,
-          roomStatus: room.status,
-          foundInGameStore,
-          roomPlayersCount: room.players.length,
-        });
-
         // Handle reconnection during game
         if (existingPlayer && room.status === "playing") {
-          console.log(
-            "[PeerJS] Player reconnecting during game:",
-            newPlayer.id,
-            "foundInGameStore:",
-            foundInGameStore
-          );
-
           let updatedPlayers: PeerPlayer[];
 
           if (foundInGameStore) {
@@ -576,10 +548,6 @@ export const usePeerStore = create<PeerStore>((set, get) => ({
 
           // Notify via callback to send resume_game (use OLD player ID for gameStore lookup)
           const { onPlayerReconnect } = get();
-          console.log(
-            "[PeerJS] onPlayerReconnect callback:",
-            !!onPlayerReconnect
-          );
           if (onPlayerReconnect) {
             // Pass the original player ID (from existingPlayer) since gameStore uses that
             onPlayerReconnect(existingPlayer.id, fromPeerId, newPlayer.name);
@@ -604,10 +572,6 @@ export const usePeerStore = create<PeerStore>((set, get) => ({
 
         // Check if player already exists (prevent duplicates in waiting room)
         if (existingPlayer) {
-          console.log(
-            "[PeerJS] Player already exists in waiting room, updating peerId:",
-            newPlayer.name
-          );
           // Update their peerId (and ID if changed) and send sync
           const updatedPlayers = room.players.map((p, idx) =>
             idx === existingPlayerIndex
@@ -675,8 +639,6 @@ export const usePeerStore = create<PeerStore>((set, get) => ({
           message as import("@/src/domain/types/peer").SyncPlayersMessage;
 
         const roomStatus = syncMsg.roomStatus ?? "waiting";
-        console.log("[PeerJS] sync_players received, roomStatus:", roomStatus);
-
         set({
           room: {
             roomCode: syncMsg.roomCode,
@@ -686,13 +648,6 @@ export const usePeerStore = create<PeerStore>((set, get) => ({
             status: roomStatus,
           },
         });
-
-        // If game is in progress, the host will send resume_game message
-        if (roomStatus === "playing") {
-          console.log(
-            "[PeerJS] Game in progress, will receive resume_game soon"
-          );
-        }
         break;
       }
 
@@ -822,7 +777,7 @@ export const usePeerStore = create<PeerStore>((set, get) => ({
       // Ping/Pong for connection health
       case "ping": {
         // Respond with pong
-        console.log("[PeerJS] Ping received from:", fromPeerId);
+        //console.log("[PeerJS] Ping received from:", fromPeerId);
         const { room, connections, hostConnection, peerId } = get();
         const pongMessage: PeerMessage = {
           type: "pong",
@@ -835,19 +790,19 @@ export const usePeerStore = create<PeerStore>((set, get) => ({
           const conn = connections.get(fromPeerId);
           if (conn?.open) {
             conn.send(pongMessage);
-            console.log("[PeerJS] Host sent pong to:", fromPeerId);
+            //console.log("[PeerJS] Host sent pong to:", fromPeerId);
           }
         } else if (hostConnection?.open) {
           // Client sends pong back to host
           hostConnection.send(pongMessage);
-          console.log("[PeerJS] Client sent pong to host");
+          //console.log("[PeerJS] Client sent pong to host");
         }
         break;
       }
 
       case "pong": {
         // Update player connection status when pong is received
-        console.log("[PeerJS] Pong received from:", fromPeerId);
+        // console.log("[PeerJS] Pong received from:", fromPeerId);
         useConnectionStore.getState().updatePlayerPing(fromPeerId);
         break;
       }

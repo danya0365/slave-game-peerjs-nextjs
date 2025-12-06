@@ -286,11 +286,9 @@ export const useConnectionStore = create<ConnectionStore>((set, get) => ({
 
   // Update player ping (called when pong received)
   updatePlayerPing: (peerId) => {
-    console.log("[ConnectionStore] updatePlayerPing called for:", peerId);
     set((state) => {
       const updated = new Map(state.playerConnections);
       const conn = updated.get(peerId);
-      console.log("[ConnectionStore] Found connection:", conn ? "yes" : "no");
       if (conn) {
         const wasOffline = conn.status === "offline";
         updated.set(peerId, {
