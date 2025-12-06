@@ -12,10 +12,12 @@ import {
 import type { Card } from "@/src/domain/types/card";
 import { PLAYER_RANK_DISPLAY } from "@/src/domain/types/card";
 import type {
+  AutoActionMessage,
   DealCardsMessage,
   PassTurnMessage,
   PeerMessage,
   PlayCardsMessage,
+  TurnTimerSyncMessage,
 } from "@/src/domain/types/peer";
 import {
   containsThreeOfClubs,
@@ -24,7 +26,11 @@ import {
 } from "@/src/domain/utils/cardUtils";
 import { cn } from "@/src/lib/utils";
 import { useConnectionStore } from "@/src/presentation/stores/connectionStore";
-import { RANK_SCORES, useGameStore } from "@/src/presentation/stores/gameStore";
+import {
+  RANK_SCORES,
+  TURN_TIMER_DURATION,
+  useGameStore,
+} from "@/src/presentation/stores/gameStore";
 import { usePeerStore } from "@/src/presentation/stores/peerStore";
 import { useUserStore } from "@/src/presentation/stores/userStore";
 import {
@@ -102,6 +108,9 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
     applyRemotePass,
     canPlayCards,
     canPass,
+    turnDeadline,
+    setTurnDeadline,
+    clearTurnDeadline,
   } = useGameStore();
 
   // Sound effects
@@ -821,6 +830,61 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
           break;
         }
 
+        case "turn_timer_sync": {
+          // Receive timer sync from host
+          const timerMsg = message as TurnTimerSyncMessage;
+          console.log(
+            "[GamePlayView] Turn timer sync received:",
+            timerMsg.turnDeadline,
+            "for player:",
+            timerMsg.currentPlayerId
+          );
+          useGameStore
+            .getState()
+            .setTurnDeadline(timerMsg.turnDeadline, timerMsg.currentPlayerId);
+          break;
+        }
+
+        case "auto_action": {
+          // Receive auto-action from host (when timer expires)
+          const autoMsg = message as AutoActionMessage;
+          console.log(
+            "[GamePlayView] Auto action received:",
+            autoMsg.actionType,
+            "for player:",
+            autoMsg.playerId
+          );
+
+          if (autoMsg.actionType === "auto_pass") {
+            // Apply auto pass
+            applyRemotePass(autoMsg.playerId);
+            addGameAction(
+              autoMsg.playerId,
+              "pass",
+              undefined,
+              "⏰ หมดเวลา - ผ่านอัตโนมัติ"
+            );
+          } else if (
+            autoMsg.actionType === "auto_play" &&
+            autoMsg.cards &&
+            autoMsg.playedHand
+          ) {
+            // Apply auto play
+            applyRemotePlay(
+              autoMsg.playerId,
+              autoMsg.cards,
+              autoMsg.playedHand
+            );
+            addGameAction(
+              autoMsg.playerId,
+              "play",
+              autoMsg.cards,
+              "⏰ หมดเวลา - ลงไพ่อัตโนมัติ"
+            );
+          }
+          break;
+        }
+
         default:
           console.log("[GamePlayView] Unhandled game message:", message.type);
       }
@@ -845,8 +909,212 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
     addToast,
   ]);
 
-  // Track finish order to add game logs when players finish
+  // Track current player for timer sync
+  const currentPlayerIndex = useGameStore((s) => s.currentPlayerIndex);
+  const currentTurnPlayerId = useGameStore((s) => s.currentTurnPlayerId);
   const finishOrder = useGameStore((s) => s.finishOrder);
+  const autoActionTriggeredRef = useRef<string | null>(null);
+
+  // Host: Broadcast turn timer when turn changes
+  useEffect(() => {
+    if (!isHost || phase !== "playing" || !gameStarted) return;
+
+    const currentPlayer = gamePlayers[currentPlayerIndex];
+    if (!currentPlayer || finishOrder.includes(currentPlayer.id)) return;
+
+    // Set new deadline
+    const deadline = Date.now() + TURN_TIMER_DURATION * 1000;
+    setTurnDeadline(deadline, currentPlayer.id);
+
+    // Reset auto-action tracking for new turn
+    autoActionTriggeredRef.current = null;
+
+    // Broadcast to all clients
+    const timerMsg: TurnTimerSyncMessage = {
+      type: "turn_timer_sync",
+      senderId: peerId!,
+      timestamp: Date.now(),
+      turnDeadline: deadline,
+      currentPlayerId: currentPlayer.id,
+    };
+
+    connections.forEach((conn, connPeerId) => {
+      if (!connPeerId.startsWith("ai-peer-") && conn.open) {
+        conn.send(timerMsg);
+      }
+    });
+
+    console.log(
+      "[GamePlayView] Timer started for:",
+      currentPlayer.name,
+      "deadline:",
+      deadline
+    );
+  }, [
+    isHost,
+    phase,
+    gameStarted,
+    currentPlayerIndex,
+    gamePlayers,
+    finishOrder,
+    peerId,
+    connections,
+    setTurnDeadline,
+  ]);
+
+  // Host: Handle auto-action when timer expires
+  useEffect(() => {
+    if (!isHost || phase !== "playing" || !turnDeadline || !currentTurnPlayerId)
+      return;
+
+    // Prevent duplicate auto-actions
+    if (autoActionTriggeredRef.current === currentTurnPlayerId) return;
+
+    const checkTimer = () => {
+      const now = Date.now();
+      if (now >= turnDeadline) {
+        // Timer expired - trigger auto-action
+        autoActionTriggeredRef.current = currentTurnPlayerId;
+
+        const currentPlayer = gamePlayers.find(
+          (p) => p.id === currentTurnPlayerId
+        );
+        if (!currentPlayer || currentPlayer.hand.length === 0) return;
+
+        console.log(
+          "[GamePlayView] Timer expired for:",
+          currentPlayer.name,
+          "- triggering auto-action"
+        );
+
+        // Determine action based on game state
+        const gameState = useGameStore.getState();
+        let autoMsg: AutoActionMessage;
+
+        if (gameState.isFirstTurn) {
+          // First turn - must play 3♣ (find it in hand and play)
+          const threeOfClubs = currentPlayer.hand.find(
+            (c) => c.suit === "club" && c.rank === "3"
+          );
+          if (threeOfClubs) {
+            const playedHand = createPlayedHand(
+              [threeOfClubs],
+              currentPlayer.id
+            );
+            if (playedHand) {
+              gamePlayCards(currentPlayer.id, [threeOfClubs]);
+              autoMsg = {
+                type: "auto_action",
+                senderId: peerId!,
+                timestamp: Date.now(),
+                playerId: currentPlayer.id,
+                actionType: "auto_play",
+                cards: [threeOfClubs],
+                playedHand,
+              };
+              addGameAction(
+                currentPlayer.id,
+                "play",
+                [threeOfClubs],
+                "⏰ หมดเวลา - ลง 3♣ อัตโนมัติ"
+              );
+            } else {
+              return; // Can't create hand, skip
+            }
+          } else {
+            return; // No 3♣ found, skip (shouldn't happen)
+          }
+        } else if (gameState.currentHand === null) {
+          // Table is empty - auto play lowest card
+          const sortedHand = sortCards([...currentPlayer.hand]);
+          const lowestCard = sortedHand[0]; // First card after sorting is lowest
+
+          const playedHand = createPlayedHand([lowestCard], currentPlayer.id);
+
+          if (playedHand) {
+            // Execute locally first
+            gamePlayCards(currentPlayer.id, [lowestCard]);
+
+            autoMsg = {
+              type: "auto_action",
+              senderId: peerId!,
+              timestamp: Date.now(),
+              playerId: currentPlayer.id,
+              actionType: "auto_play",
+              cards: [lowestCard],
+              playedHand,
+            };
+
+            addGameAction(
+              currentPlayer.id,
+              "play",
+              [lowestCard],
+              "⏰ หมดเวลา - ลงไพ่อัตโนมัติ"
+            );
+          } else {
+            // Fallback to pass if can't create hand
+            gamePass(currentPlayer.id);
+            autoMsg = {
+              type: "auto_action",
+              senderId: peerId!,
+              timestamp: Date.now(),
+              playerId: currentPlayer.id,
+              actionType: "auto_pass",
+            };
+            addGameAction(
+              currentPlayer.id,
+              "pass",
+              undefined,
+              "⏰ หมดเวลา - ผ่านอัตโนมัติ"
+            );
+          }
+        } else {
+          // Table has cards - auto pass
+          gamePass(currentPlayer.id);
+          autoMsg = {
+            type: "auto_action",
+            senderId: peerId!,
+            timestamp: Date.now(),
+            playerId: currentPlayer.id,
+            actionType: "auto_pass",
+          };
+          addGameAction(
+            currentPlayer.id,
+            "pass",
+            undefined,
+            "⏰ หมดเวลา - ผ่านอัตโนมัติ"
+          );
+        }
+
+        // Broadcast to all clients
+        connections.forEach((conn, connPeerId) => {
+          if (!connPeerId.startsWith("ai-peer-") && conn.open) {
+            conn.send(autoMsg);
+          }
+        });
+
+        // Clear deadline
+        clearTurnDeadline();
+      }
+    };
+
+    const interval = setInterval(checkTimer, 500);
+    return () => clearInterval(interval);
+  }, [
+    isHost,
+    phase,
+    turnDeadline,
+    currentTurnPlayerId,
+    gamePlayers,
+    peerId,
+    connections,
+    gamePlayCards,
+    gamePass,
+    addGameAction,
+    clearTurnDeadline,
+  ]);
+
+  // Track finish order to add game logs when players finish
   const [prevFinishOrder, setPrevFinishOrder] = useState<string[]>([]);
 
   useEffect(() => {
@@ -1970,6 +2238,7 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
                   ).lastPingTime
                 }
                 isThisPlayerHost={isPlayerHost(topPlayer.id)}
+                turnDeadline={topPlayer.isCurrentTurn ? turnDeadline : null}
               />
             </div>
           )}
@@ -2000,6 +2269,7 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
                   ).lastPingTime
                 }
                 isThisPlayerHost={isPlayerHost(leftPlayer.id)}
+                turnDeadline={leftPlayer.isCurrentTurn ? turnDeadline : null}
               />
             </div>
           )}
@@ -2030,6 +2300,7 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
                   ).lastPingTime
                 }
                 isThisPlayerHost={isPlayerHost(rightPlayer.id)}
+                turnDeadline={rightPlayer.isCurrentTurn ? turnDeadline : null}
               />
             </div>
           )}
@@ -2086,6 +2357,7 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
                   onCardSelect={handleCardSelect}
                   isCurrentTurn={isMyTurn}
                   disabled={!isMyTurn}
+                  turnDeadline={isMyTurn ? turnDeadline : null}
                 />
 
                 {/* Controls - compact on mobile */}

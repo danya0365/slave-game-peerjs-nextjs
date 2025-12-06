@@ -40,11 +40,18 @@ export const RANK_SCORES: Record<PlayerRank, number> = {
   slave: 0,
 };
 
+// Turn timer duration in seconds
+export const TURN_TIMER_DURATION = 30;
+
 // Game state
 interface GameState {
   // Game info
   phase: GamePhase;
   roundNumber: number;
+
+  // Turn timer
+  turnDeadline: number | null; // Unix timestamp when current turn expires
+  currentTurnPlayerId: string | null; // Player whose turn it is (for timer sync)
 
   // Players
   players: GamePlayer[];
@@ -100,6 +107,10 @@ interface GameActions {
   // Reset
   resetGame: () => void;
   resetRound: () => void;
+
+  // Turn timer
+  setTurnDeadline: (deadline: number, playerId: string) => void;
+  clearTurnDeadline: () => void;
 }
 
 type GameStore = GameState & GameActions;
@@ -107,6 +118,8 @@ type GameStore = GameState & GameActions;
 const initialState: GameState = {
   phase: "waiting",
   roundNumber: 0,
+  turnDeadline: null,
+  currentTurnPlayerId: null,
   players: [],
   currentPlayerIndex: 0,
   currentHand: null,
@@ -668,7 +681,25 @@ export const useGameStore = create<GameStore>((set, get) => ({
       isFirstTurn: true,
       finishOrder: [],
       players: resetPlayers,
+      turnDeadline: null,
+      currentTurnPlayerId: null,
       // roundNumber is preserved for next round
+    });
+  },
+
+  // Set turn deadline
+  setTurnDeadline: (deadline, playerId) => {
+    set({
+      turnDeadline: deadline,
+      currentTurnPlayerId: playerId,
+    });
+  },
+
+  // Clear turn deadline
+  clearTurnDeadline: () => {
+    set({
+      turnDeadline: null,
+      currentTurnPlayerId: null,
     });
   },
 }));
@@ -679,3 +710,7 @@ export const useGamePlayers = () => useGameStore((state) => state.players);
 export const useCurrentHand = () => useGameStore((state) => state.currentHand);
 export const useIsFirstTurn = () => useGameStore((state) => state.isFirstTurn);
 export const useFinishOrder = () => useGameStore((state) => state.finishOrder);
+export const useTurnDeadline = () =>
+  useGameStore((state) => state.turnDeadline);
+export const useCurrentTurnPlayerId = () =>
+  useGameStore((state) => state.currentTurnPlayerId);

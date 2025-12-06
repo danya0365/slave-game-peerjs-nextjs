@@ -828,6 +828,24 @@ export const usePeerStore = create<PeerStore>((set, get) => ({
         break;
       }
 
+      // Turn timer sync (host broadcasts timer deadline to all clients)
+      case "turn_timer_sync": {
+        const { onGameMessage } = get();
+        if (onGameMessage) {
+          onGameMessage(message);
+        }
+        break;
+      }
+
+      // Auto action (host triggers auto-action when timer expires)
+      case "auto_action": {
+        const { onGameMessage } = get();
+        if (onGameMessage) {
+          onGameMessage(message);
+        }
+        break;
+      }
+
       default:
         console.log(
           "[PeerJS] Unknown message type:",

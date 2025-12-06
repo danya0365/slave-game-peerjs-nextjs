@@ -46,6 +46,8 @@ export type MessageType =
   | "player_disconnected"
   | "player_reconnected"
   | "kick_player"
+  | "turn_timer_sync"
+  | "auto_action"
   | "error";
 
 // Base message structure
@@ -238,6 +240,22 @@ export interface PlayerReconnectedMessage extends BaseMessage {
   playerName: string;
 }
 
+// Turn timer sync message (host broadcasts deadline to all players)
+export interface TurnTimerSyncMessage extends BaseMessage {
+  type: "turn_timer_sync";
+  turnDeadline: number; // Unix timestamp when turn expires
+  currentPlayerId: string; // Player whose turn it is
+}
+
+// Auto action message (host triggers auto-action when time expires)
+export interface AutoActionMessage extends BaseMessage {
+  type: "auto_action";
+  playerId: string;
+  actionType: "auto_pass" | "auto_play";
+  cards?: Card[]; // Only for auto_play
+  playedHand?: PlayedHand; // Only for auto_play
+}
+
 // Error message
 export interface ErrorMessage extends BaseMessage {
   type: "error";
@@ -267,6 +285,8 @@ export type PeerMessage =
   | ResumeGameMessage
   | PlayerDisconnectedMessage
   | PlayerReconnectedMessage
+  | TurnTimerSyncMessage
+  | AutoActionMessage
   | ErrorMessage;
 
 // Connection status

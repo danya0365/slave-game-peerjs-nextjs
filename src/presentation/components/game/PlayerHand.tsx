@@ -6,6 +6,7 @@ import { cn } from "@/src/lib/utils";
 import { AlertCircle, Wifi, WifiOff } from "lucide-react";
 import { useState } from "react";
 import { CardComponent } from "./CardComponent";
+import { TurnCountdown } from "./TurnCountdown";
 
 interface PlayerHandProps {
   cards: Card[];
@@ -13,6 +14,7 @@ interface PlayerHandProps {
   onCardSelect: (card: Card) => void;
   isCurrentTurn: boolean;
   disabled?: boolean;
+  turnDeadline?: number | null;
 }
 
 /**
@@ -24,6 +26,7 @@ export function PlayerHand({
   onCardSelect,
   isCurrentTurn,
   disabled = false,
+  turnDeadline,
 }: PlayerHandProps) {
   const isCardSelected = (card: Card) =>
     selectedCards.some((c) => c.id === card.id);
@@ -42,10 +45,18 @@ export function PlayerHand({
 
   return (
     <div className="relative w-full overflow-visible">
-      {/* Turn indicator */}
+      {/* Turn indicator with countdown */}
       {isCurrentTurn && (
-        <div className="absolute -top-6 md:-top-8 left-1/2 -translate-x-1/2 px-2 md:px-3 py-0.5 md:py-1 bg-yellow-500 text-yellow-900 rounded-full text-xs md:text-sm font-bold animate-pulse whitespace-nowrap z-20">
-          ตาของคุณ!
+        <div className="absolute -top-8 md:-top-10 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 z-20">
+          <div className="px-2 md:px-3 py-0.5 md:py-1 bg-yellow-500 text-yellow-900 rounded-full text-xs md:text-sm font-bold animate-pulse whitespace-nowrap">
+            ตาของคุณ!
+          </div>
+          {turnDeadline && (
+            <TurnCountdown
+              deadline={turnDeadline}
+              isCurrentTurn={isCurrentTurn}
+            />
+          )}
         </div>
       )}
 
@@ -125,6 +136,8 @@ interface OpponentHandProps {
   isThisPlayerHost?: boolean; // Is this opponent the host player
   connectionStatus?: PlayerConnectionStatus;
   lastPingTime?: number;
+  // Turn timer
+  turnDeadline?: number | null;
 }
 
 // Get rank display based on finish order
@@ -160,6 +173,7 @@ export function OpponentHand({
   isThisPlayerHost = false,
   connectionStatus = "online",
   lastPingTime,
+  turnDeadline,
 }: OpponentHandProps) {
   const [showConnectionDetails, setShowConnectionDetails] = useState(false);
 
@@ -298,6 +312,14 @@ export function OpponentHand({
           >
             <span>{getRankDisplay(finishOrder).emoji}</span>
           </div>
+        )}
+        {/* Turn countdown timer */}
+        {isCurrentTurn && turnDeadline && (
+          <TurnCountdown
+            deadline={turnDeadline}
+            isCurrentTurn={isCurrentTurn}
+            className="mt-1"
+          />
         )}
       </div>
 
