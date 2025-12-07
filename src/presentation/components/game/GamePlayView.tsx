@@ -493,37 +493,56 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
         case "play_cards": {
           // Handle other player's card play (use remote apply - no validation)
           const playMsg = message as PlayCardsMessage;
-          applyRemotePlay(playMsg.playerId, playMsg.cards, playMsg.playedHand);
-          // Add to history
-          addGameAction(playMsg.playerId, "play", playMsg.cards);
 
-          // Host: relay to all other clients (except sender and AI)
+          // Host: apply locally first to get authoritative nextPlayerIndex
           if (usePeerStore.getState().room?.isHost) {
+            applyRemotePlay(
+              playMsg.playerId,
+              playMsg.cards,
+              playMsg.playedHand
+            );
+            // Get host's authoritative next player index
+            const hostNextPlayerIndex =
+              useGameStore.getState().currentPlayerIndex;
+
+            // Relay to all other clients with host's nextPlayerIndex
             const conns = usePeerStore.getState().connections;
             conns.forEach((conn, connPeerId) => {
-              // Don't send back to the original sender or AI
               if (
                 connPeerId !== playMsg.senderId &&
                 !connPeerId.startsWith("ai-peer-") &&
                 conn.open
               ) {
-                conn.send(playMsg);
+                conn.send({ ...playMsg, nextPlayerIndex: hostNextPlayerIndex });
               }
             });
+          } else {
+            // Client: use host's nextPlayerIndex if provided
+            applyRemotePlay(
+              playMsg.playerId,
+              playMsg.cards,
+              playMsg.playedHand,
+              playMsg.nextPlayerIndex
+            );
           }
+
+          // Add to history
+          addGameAction(playMsg.playerId, "play", playMsg.cards);
           break;
         }
 
         case "pass_turn": {
           // Handle other player's pass (use remote apply - no validation)
           const passMsg = message as PassTurnMessage;
-          applyRemotePass(passMsg.playerId);
-          // Add to history
-          addGameAction(passMsg.playerId, "pass");
 
-          // Host: relay to all other clients (except sender) and check all_passed
+          // Host: apply locally first to get authoritative nextPlayerIndex
           if (usePeerStore.getState().room?.isHost) {
-            // Relay pass to other clients
+            applyRemotePass(passMsg.playerId);
+            // Get host's authoritative next player index
+            const hostNextPlayerIndex =
+              useGameStore.getState().currentPlayerIndex;
+
+            // Relay pass to other clients with host's nextPlayerIndex
             const conns = usePeerStore.getState().connections;
             conns.forEach((conn, connPeerId) => {
               if (
@@ -531,10 +550,19 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
                 !connPeerId.startsWith("ai-peer-") &&
                 conn.open
               ) {
-                conn.send(passMsg);
+                conn.send({ ...passMsg, nextPlayerIndex: hostNextPlayerIndex });
               }
             });
+          } else {
+            // Client: use host's nextPlayerIndex if provided
+            applyRemotePass(passMsg.playerId, passMsg.nextPlayerIndex);
+          }
 
+          // Add to history
+          addGameAction(passMsg.playerId, "pass");
+
+          // Host: check all_passed
+          if (usePeerStore.getState().room?.isHost) {
             // Check if round was reset (all_passed)
             const newState = useGameStore.getState();
             if (newState.currentHand === null) {
@@ -643,6 +671,7 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
                 passCount: gameState.passCount,
                 isFirstTurn: gameState.isFirstTurn,
                 currentHand: gameState.currentHand,
+                turnDeadline: gameState.turnDeadline, // Include host's current deadline
               },
               discardPile: gameState.discardPile,
               allPlayers: gameState.players.map((p) => ({
@@ -734,6 +763,7 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
               currentHand: syncMsg.gameState.currentHand,
               discardPile: syncMsg.discardPile,
               players: restoredPlayers,
+              turnDeadline: syncMsg.gameState.turnDeadline, // Apply host's deadline
             };
           });
 
@@ -804,6 +834,7 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
               currentHand: resumeMsg.gameState.currentHand,
               discardPile: resumeMsg.discardPile,
               players: restoredPlayers,
+              turnDeadline: resumeMsg.gameState.turnDeadline, // Apply host's deadline
             };
           });
 
@@ -831,17 +862,13 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
         }
 
         case "turn_timer_sync": {
-          // Receive timer sync from host
+          // Receive timer sync from host - only sync deadline, current player comes from game state
           const timerMsg = message as TurnTimerSyncMessage;
           console.log(
             "[GamePlayView] Turn timer sync received:",
-            timerMsg.turnDeadline,
-            "for player:",
-            timerMsg.currentPlayerId
+            timerMsg.turnDeadline
           );
-          useGameStore
-            .getState()
-            .setTurnDeadline(timerMsg.turnDeadline, timerMsg.currentPlayerId);
+          useGameStore.getState().setTurnDeadline(timerMsg.turnDeadline);
           break;
         }
 
@@ -911,7 +938,6 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
 
   // Track current player for timer sync
   const currentPlayerIndex = useGameStore((s) => s.currentPlayerIndex);
-  const currentTurnPlayerId = useGameStore((s) => s.currentTurnPlayerId);
   const finishOrder = useGameStore((s) => s.finishOrder);
   const autoActionTriggeredRef = useRef<string | null>(null);
 
@@ -924,7 +950,7 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
 
     // Set new deadline
     const deadline = Date.now() + TURN_TIMER_DURATION * 1000;
-    setTurnDeadline(deadline, currentPlayer.id);
+    setTurnDeadline(deadline);
 
     // Reset auto-action tracking for new turn
     autoActionTriggeredRef.current = null;
@@ -964,21 +990,21 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
 
   // Host: Handle auto-action when timer expires
   useEffect(() => {
-    if (!isHost || phase !== "playing" || !turnDeadline || !currentTurnPlayerId)
+    const currentPlayer = gamePlayers[currentPlayerIndex];
+    const currentPlayerId = currentPlayer?.id;
+
+    if (!isHost || phase !== "playing" || !turnDeadline || !currentPlayerId)
       return;
 
     // Prevent duplicate auto-actions
-    if (autoActionTriggeredRef.current === currentTurnPlayerId) return;
+    if (autoActionTriggeredRef.current === currentPlayerId) return;
 
     const checkTimer = () => {
       const now = Date.now();
       if (now >= turnDeadline) {
         // Timer expired - trigger auto-action
-        autoActionTriggeredRef.current = currentTurnPlayerId;
+        autoActionTriggeredRef.current = currentPlayerId;
 
-        const currentPlayer = gamePlayers.find(
-          (p) => p.id === currentTurnPlayerId
-        );
         if (!currentPlayer || currentPlayer.hand.length === 0) return;
 
         console.log(
@@ -1104,7 +1130,7 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
     isHost,
     phase,
     turnDeadline,
-    currentTurnPlayerId,
+    currentPlayerIndex,
     gamePlayers,
     peerId,
     connections,
@@ -1394,6 +1420,7 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
           passCount: gameState.passCount,
           isFirstTurn: gameState.isFirstTurn,
           currentHand: gameState.currentHand,
+          turnDeadline: gameState.turnDeadline, // Include host's deadline
         },
         discardPile: gameState.discardPile,
         allPlayers: gameState.players.map((p) => ({
@@ -1590,6 +1617,9 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
           // Add to game history
           addGameAction(currentPlayer.id, "play", decision.cards);
 
+          // Get the next player index from host's authoritative state
+          const nextPlayerIndex = useGameStore.getState().currentPlayerIndex;
+
           // Broadcast to other players (non-AI only)
           const message = {
             type: "play_cards" as const,
@@ -1598,6 +1628,7 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
             playerId: currentPlayer.id,
             cards: decision.cards,
             playedHand: decision.playedHand,
+            nextPlayerIndex,
           };
 
           // Only send to real players (not AI)
@@ -1617,12 +1648,16 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
             // Add to game history
             addGameAction(currentPlayer.id, "pass");
 
+            // Get the next player index from host's authoritative state
+            const nextPlayerIndex = useGameStore.getState().currentPlayerIndex;
+
             // Broadcast pass to other players (non-AI only)
             const passMessage = {
               type: "pass_turn" as const,
               senderId: peerId!,
               timestamp: Date.now(),
               playerId: currentPlayer.id,
+              nextPlayerIndex,
             };
 
             connections.forEach((conn, connPeerId) => {
@@ -1669,6 +1704,8 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
                 .playCards(currentPlayer.id, [lowestCard]);
               if (success) {
                 addGameAction(currentPlayer.id, "play", [lowestCard]);
+                const nextPlayerIndex =
+                  useGameStore.getState().currentPlayerIndex;
                 const message = {
                   type: "play_cards" as const,
                   senderId: peerId!,
@@ -1676,6 +1713,7 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
                   playerId: currentPlayer.id,
                   cards: [lowestCard],
                   playedHand: forcedHand,
+                  nextPlayerIndex,
                 };
                 connections.forEach((conn, connPeerId) => {
                   if (!connPeerId.startsWith("ai-peer-") && conn.open) {
@@ -1904,6 +1942,9 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
       // Add to game history
       addGameAction(myPlayerId, "play", selectedCards);
 
+      // Get next player index (only accurate for host)
+      const nextPlayerIndex = useGameStore.getState().currentPlayerIndex;
+
       // Send to other players
       const message = {
         type: "play_cards" as const,
@@ -1912,13 +1953,14 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
         playerId: myPlayerId,
         cards: selectedCards,
         playedHand,
+        nextPlayerIndex, // Host's value is authoritative, client's will be replaced by host
       };
 
       if (isHost) {
         // Host broadcasts to all clients
         broadcastToAll(message);
       } else {
-        // Client sends to host (host will relay to others)
+        // Client sends to host (host will relay with correct nextPlayerIndex)
         const hostConnection = usePeerStore.getState().hostConnection;
         if (hostConnection?.open) {
           hostConnection.send(message);
@@ -1941,11 +1983,15 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
       // Add to game history
       addGameAction(myPlayerId, "pass");
 
+      // Get next player index (only accurate for host)
+      const nextPlayerIndex = useGameStore.getState().currentPlayerIndex;
+
       const passMessage = {
         type: "pass_turn" as const,
         senderId: peerId!,
         timestamp: Date.now(),
         playerId: myPlayerId,
+        nextPlayerIndex, // Host's value is authoritative, client's will be replaced by host
       };
 
       if (isHost) {

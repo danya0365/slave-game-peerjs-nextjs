@@ -51,7 +51,6 @@ interface GameState {
 
   // Turn timer
   turnDeadline: number | null; // Unix timestamp when current turn expires
-  currentTurnPlayerId: string | null; // Player whose turn it is (for timer sync)
 
   // Players
   players: GamePlayer[];
@@ -86,9 +85,10 @@ interface GameActions {
   applyRemotePlay: (
     playerId: string,
     cards: Card[],
-    playedHand: PlayedHand
+    playedHand: PlayedHand,
+    nextPlayerIndex?: number // Host's authoritative next player index
   ) => void;
-  applyRemotePass: (playerId: string) => void;
+  applyRemotePass: (playerId: string, nextPlayerIndex?: number) => void;
 
   // Validation
   canPlayCards: (playerId: string, cards: Card[]) => boolean;
@@ -109,7 +109,7 @@ interface GameActions {
   resetRound: () => void;
 
   // Turn timer
-  setTurnDeadline: (deadline: number, playerId: string) => void;
+  setTurnDeadline: (deadline: number) => void;
   clearTurnDeadline: () => void;
 }
 
@@ -119,7 +119,6 @@ const initialState: GameState = {
   phase: "waiting",
   roundNumber: 0,
   turnDeadline: null,
-  currentTurnPlayerId: null,
   players: [],
   currentPlayerIndex: 0,
   currentHand: null,
@@ -297,7 +296,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   // Apply remote play (no validation - for syncing from other players)
-  applyRemotePlay: (playerId, cards, playedHand) => {
+  applyRemotePlay: (playerId, cards, playedHand, nextPlayerIndex) => {
     const state = get();
     const { players } = state;
 
@@ -313,11 +312,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const finishedPlayers = state.finishOrder.length;
     const playerFinished = remainingCards.length === 0;
 
+    // If nextPlayerIndex is provided (from host), use it directly
+    // Otherwise fall back to calculating locally
+    const useHostIndex = nextPlayerIndex !== undefined;
+
     // Update all players
     const updatedPlayers = players.map((p, index) => ({
       ...p,
       hand: index === playerIndex ? remainingCards : p.hand,
-      isCurrentTurn: false, // Will be set by nextTurn
+      isCurrentTurn: useHostIndex ? index === nextPlayerIndex : false,
       hasPassed: false,
       finishOrder:
         index === playerIndex && playerFinished
@@ -335,6 +338,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       finishOrder: playerFinished
         ? [...state.finishOrder, playerId]
         : state.finishOrder,
+      ...(useHostIndex ? { currentPlayerIndex: nextPlayerIndex } : {}),
     });
 
     // Check for game end or move to next turn
@@ -342,36 +346,41 @@ export const useGameStore = create<GameStore>((set, get) => ({
       get().checkGameEnd();
     }
 
-    if (get().phase === "playing") {
+    // Only calculate next turn locally if host didn't provide index
+    if (!useHostIndex && get().phase === "playing") {
       get().nextTurn();
     }
   },
 
   // Apply remote pass (no validation - for syncing from other players)
-  applyRemotePass: (playerId) => {
+  applyRemotePass: (playerId, nextPlayerIndex) => {
     const state = get();
     const { players } = state;
 
     const playerIndex = players.findIndex((p) => p.id === playerId);
     if (playerIndex === -1) return;
 
+    // If nextPlayerIndex is provided (from host), use it directly
+    const useHostIndex = nextPlayerIndex !== undefined;
+
     // Update player
     const updatedPlayers = players.map((p, index) => ({
       ...p,
-      isCurrentTurn: false, // Will be set by nextTurn
+      isCurrentTurn: useHostIndex ? index === nextPlayerIndex : false,
       hasPassed: index === playerIndex ? true : p.hasPassed,
     }));
 
     set({
       players: updatedPlayers,
       passCount: state.passCount + 1,
+      ...(useHostIndex ? { currentPlayerIndex: nextPlayerIndex } : {}),
     });
 
     // Check if round should end - if true, turn is already set to lastPlayer
     const roundEnded = get().checkRoundEnd();
 
-    // Only call nextTurn if round didn't end
-    if (!roundEnded && get().phase === "playing") {
+    // Only call nextTurn if round didn't end and host didn't provide index
+    if (!useHostIndex && !roundEnded && get().phase === "playing") {
       get().nextTurn();
     }
   },
@@ -682,25 +691,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
       finishOrder: [],
       players: resetPlayers,
       turnDeadline: null,
-      currentTurnPlayerId: null,
       // roundNumber is preserved for next round
     });
   },
 
   // Set turn deadline
-  setTurnDeadline: (deadline, playerId) => {
-    set({
-      turnDeadline: deadline,
-      currentTurnPlayerId: playerId,
-    });
+  setTurnDeadline: (deadline) => {
+    set({ turnDeadline: deadline });
   },
 
   // Clear turn deadline
   clearTurnDeadline: () => {
-    set({
-      turnDeadline: null,
-      currentTurnPlayerId: null,
-    });
+    set({ turnDeadline: null });
   },
 }));
 
@@ -712,5 +714,3 @@ export const useIsFirstTurn = () => useGameStore((state) => state.isFirstTurn);
 export const useFinishOrder = () => useGameStore((state) => state.finishOrder);
 export const useTurnDeadline = () =>
   useGameStore((state) => state.turnDeadline);
-export const useCurrentTurnPlayerId = () =>
-  useGameStore((state) => state.currentTurnPlayerId);

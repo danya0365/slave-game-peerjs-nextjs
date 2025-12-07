@@ -118,12 +118,14 @@ export interface PlayCardsMessage extends BaseMessage {
   playerId: string;
   cards: Card[];
   playedHand: PlayedHand;
+  nextPlayerIndex: number; // Host's authoritative next player index
 }
 
 // Pass turn message
 export interface PassTurnMessage extends BaseMessage {
   type: "pass_turn";
   playerId: string;
+  nextPlayerIndex: number; // Host's authoritative next player index
 }
 
 // Round end message
@@ -185,6 +187,7 @@ export interface SyncGameStateMessage extends BaseMessage {
     passCount: number;
     isFirstTurn: boolean;
     currentHand: PlayedHand | null;
+    turnDeadline: number | null; // Host's current turn deadline
   };
   discardPile: PlayedHand[];
   allPlayers: {
@@ -213,6 +216,7 @@ export interface ResumeGameMessage extends BaseMessage {
     passCount: number;
     isFirstTurn: boolean;
     currentHand: PlayedHand | null;
+    turnDeadline: number | null; // Host's current turn deadline
   };
   discardPile: PlayedHand[];
   allPlayers: {

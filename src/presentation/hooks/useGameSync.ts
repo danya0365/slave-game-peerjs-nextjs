@@ -142,6 +142,9 @@ export function useGameSync() {
       const success = gamePlayCards(currentPlayer.id, cards);
       if (!success) return false;
 
+      // Get next player index (only accurate for host)
+      const nextPlayerIndex = useGameStore.getState().currentPlayerIndex;
+
       // Broadcast to others
       const message: PlayCardsMessage = {
         type: "play_cards",
@@ -150,6 +153,7 @@ export function useGameSync() {
         playerId: currentPlayer.id,
         cards,
         playedHand,
+        nextPlayerIndex,
       };
 
       if (isHost) {
@@ -190,12 +194,16 @@ export function useGameSync() {
     const success = gamePass(currentPlayer.id);
     if (!success) return false;
 
+    // Get next player index (only accurate for host)
+    const nextPlayerIndex = useGameStore.getState().currentPlayerIndex;
+
     // Broadcast to others
     const message: PassTurnMessage = {
       type: "pass_turn",
       senderId: peerId,
       timestamp: Date.now(),
       playerId: currentPlayer.id,
+      nextPlayerIndex,
     };
 
     if (isHost) {
