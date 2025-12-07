@@ -940,13 +940,22 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
   const currentPlayerIndex = useGameStore((s) => s.currentPlayerIndex);
   const finishOrder = useGameStore((s) => s.finishOrder);
   const autoActionTriggeredRef = useRef<string | null>(null);
+  const lastTimerPlayerIndexRef = useRef<number | null>(null);
 
-  // Host: Broadcast turn timer when turn changes
+  // Host: Broadcast turn timer when turn ACTUALLY changes (not on every re-render)
   useEffect(() => {
     if (!isHost || phase !== "playing" || !gameStarted) return;
 
     const currentPlayer = gamePlayers[currentPlayerIndex];
     if (!currentPlayer || finishOrder.includes(currentPlayer.id)) return;
+
+    // Only set new deadline if the turn actually changed
+    if (lastTimerPlayerIndexRef.current === currentPlayerIndex) {
+      return; // Turn hasn't changed, don't reset timer
+    }
+
+    // Update the tracked index
+    lastTimerPlayerIndexRef.current = currentPlayerIndex;
 
     // Set new deadline
     const deadline = Date.now() + TURN_TIMER_DURATION * 1000;
