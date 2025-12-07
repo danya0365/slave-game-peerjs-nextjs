@@ -263,6 +263,20 @@ export const useConnectionStore = create<ConnectionStore>((set, get) => ({
     });
     set((state) => {
       const updated = new Map(state.playerConnections);
+
+      // Remove old entries with the same playerId (e.g., from old peerId after reconnect)
+      for (const [oldPeerId, conn] of updated) {
+        if (conn.playerId === playerId && oldPeerId !== peerId) {
+          console.log(
+            "[ConnectionStore] Removing old entry for playerId:",
+            playerId,
+            "oldPeerId:",
+            oldPeerId
+          );
+          updated.delete(oldPeerId);
+        }
+      }
+
       updated.set(peerId, {
         peerId,
         playerId,

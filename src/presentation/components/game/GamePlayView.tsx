@@ -161,6 +161,7 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
     addToast,
     reset: resetConnection,
     playerConnections,
+    removeDisconnectedPlayer,
   } = useConnectionStore();
 
   // Helper to get connection status for a player
@@ -783,6 +784,8 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
         case "player_reconnected": {
           const rcMsg =
             message as import("@/src/domain/types/peer").PlayerReconnectedMessage;
+          // Remove from disconnected players list
+          removeDisconnectedPlayer(rcMsg.playerId);
           addToast("success", `${rcMsg.playerName} กลับมาแล้ว`);
           break;
         }
@@ -934,6 +937,7 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
     addGameAction,
     addSystemAction,
     addToast,
+    removeDisconnectedPlayer,
   ]);
 
   // Track current player for timer sync
@@ -1389,6 +1393,12 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
         `[GamePlayView] Player reconnected: ${playerName} (${playerId})`
       );
 
+      // Re-register player with new peerId (this will remove old entries)
+      registerPlayer(playerPeerId, playerId, playerName);
+
+      // Also remove from disconnectedPlayers list
+      removeDisconnectedPlayer(playerId);
+
       const gameState = useGameStore.getState();
 
       // Find player by ID first, then by name as fallback
@@ -1461,7 +1471,15 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
     return () => {
       setOnPlayerReconnect(null);
     };
-  }, [isHost, peerId, connections, setOnPlayerReconnect, addToast]);
+  }, [
+    isHost,
+    peerId,
+    connections,
+    setOnPlayerReconnect,
+    addToast,
+    registerPlayer,
+    removeDisconnectedPlayer,
+  ]);
 
   // Cleanup connection store on unmount
   useEffect(() => {
