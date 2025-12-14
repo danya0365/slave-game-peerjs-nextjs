@@ -48,6 +48,9 @@ export type MessageType =
   | "kick_player"
   | "turn_timer_sync"
   | "auto_action"
+  | "state_check_request"
+  | "state_check_response"
+  | "force_sync"
   | "error";
 
 // Base message structure
@@ -266,6 +269,54 @@ export interface ErrorMessage extends BaseMessage {
   error: string;
 }
 
+// State check request message (host asks all clients for their state hash)
+export interface StateCheckRequestMessage extends BaseMessage {
+  type: "state_check_request";
+  checkId: string; // Unique ID for this check
+  hostStateHash: string; // Hash of host's state for comparison
+}
+
+// State check response message (client responds with their state hash)
+export interface StateCheckResponseMessage extends BaseMessage {
+  type: "state_check_response";
+  checkId: string;
+  playerId: string;
+  playerName: string;
+  clientStateHash: string;
+  currentPlayerIndex: number;
+  roundNumber: number;
+  handCount: number;
+  passCount: number;
+}
+
+// Force sync message (host forces client to sync)
+export interface ForceSyncMessage extends BaseMessage {
+  type: "force_sync";
+  hand: Card[]; // The player's actual hand
+  gameState: {
+    phase: string;
+    currentPlayerIndex: number;
+    roundNumber: number;
+    finishOrder: string[];
+    lastPlayerId: string | null;
+    passCount: number;
+    isFirstTurn: boolean;
+    currentHand: PlayedHand | null;
+    turnDeadline: number | null;
+  };
+  discardPile: PlayedHand[];
+  allPlayers: {
+    id: string;
+    name: string;
+    avatar: string;
+    handCount: number;
+    hasPassed: boolean;
+    isCurrentTurn: boolean;
+    finishOrder?: number;
+    isAI?: boolean;
+  }[];
+}
+
 // Union type for all messages
 export type PeerMessage =
   | PlayerJoinMessage
@@ -291,6 +342,9 @@ export type PeerMessage =
   | PlayerReconnectedMessage
   | TurnTimerSyncMessage
   | AutoActionMessage
+  | StateCheckRequestMessage
+  | StateCheckResponseMessage
+  | ForceSyncMessage
   | ErrorMessage;
 
 // Connection status

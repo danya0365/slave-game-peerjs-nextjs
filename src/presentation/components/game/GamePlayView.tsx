@@ -149,6 +149,12 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
   const [aiDifficulty, setAiDifficulty] = useState<AIDifficulty>("medium");
   const aiTurnInProgress = useRef(false);
 
+  // State check for Host (to verify client states)
+  const [isCheckingState, setIsCheckingState] = useState(false);
+  const stateCheckResponsesRef = useRef<
+    import("@/src/domain/types/peer").StateCheckResponseMessage[]
+  >([]);
+
   // Connection store
   const {
     disconnectedPlayers,
@@ -495,6 +501,20 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
           // Handle other player's card play (use remote apply - no validation)
           const playMsg = message as PlayCardsMessage;
 
+          // Skip if this is our own play (we already called gamePlayCards locally)
+          if (playMsg.playerId === myPlayerId) {
+            // Only update currentPlayerIndex from host's authoritative value
+            if (
+              !usePeerStore.getState().room?.isHost &&
+              playMsg.nextPlayerIndex !== undefined
+            ) {
+              useGameStore.setState({
+                currentPlayerIndex: playMsg.nextPlayerIndex,
+              });
+            }
+            break;
+          }
+
           // Host: apply locally first to get authoritative nextPlayerIndex
           if (usePeerStore.getState().room?.isHost) {
             applyRemotePlay(
@@ -535,6 +555,20 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
         case "pass_turn": {
           // Handle other player's pass (use remote apply - no validation)
           const passMsg = message as PassTurnMessage;
+
+          // Skip if this is our own pass (we already called gamePass locally)
+          if (passMsg.playerId === myPlayerId) {
+            // Only update currentPlayerIndex from host's authoritative value
+            if (
+              !usePeerStore.getState().room?.isHost &&
+              passMsg.nextPlayerIndex !== undefined
+            ) {
+              useGameStore.setState({
+                currentPlayerIndex: passMsg.nextPlayerIndex,
+              });
+            }
+            break;
+          }
 
           // Host: apply locally first to get authoritative nextPlayerIndex
           if (usePeerStore.getState().room?.isHost) {
@@ -912,6 +946,120 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
               "⏰ หมดเวลา - ลงไพ่อัตโนมัติ"
             );
           }
+          break;
+        }
+
+        case "state_check_request": {
+          // Host is asking for our state hash - respond with our state info
+          if (usePeerStore.getState().room?.isHost) break; // Host doesn't respond to itself
+
+          const checkReq =
+            message as import("@/src/domain/types/peer").StateCheckRequestMessage;
+          const localState = useGameStore.getState();
+          const localPlayer = localState.players.find(
+            (p) => p.id === myPlayerId
+          );
+
+          // Create state hash from critical game state fields
+          const stateHash = `${localState.currentPlayerIndex}-${
+            localState.roundNumber
+          }-${localState.passCount}-${localPlayer?.hand.length ?? 0}-${
+            localState.isFirstTurn
+          }`;
+
+          const hostConn = usePeerStore.getState().hostConnection;
+          if (hostConn?.open) {
+            hostConn.send({
+              type: "state_check_response" as const,
+              senderId: usePeerStore.getState().peerId!,
+              timestamp: Date.now(),
+              checkId: checkReq.checkId,
+              playerId: myPlayerId!,
+              playerName: user?.name ?? "",
+              clientStateHash: stateHash,
+              currentPlayerIndex: localState.currentPlayerIndex,
+              roundNumber: localState.roundNumber,
+              handCount: localPlayer?.hand.length ?? 0,
+              passCount: localState.passCount,
+            });
+            console.log("[GamePlayView] Sent state_check_response:", stateHash);
+          }
+          break;
+        }
+
+        case "state_check_response": {
+          // Client responded with their state - host handles this
+          if (!usePeerStore.getState().room?.isHost) break;
+
+          const checkRes =
+            message as import("@/src/domain/types/peer").StateCheckResponseMessage;
+
+          // Add to pending responses (handled via stateCheckResponsesRef)
+          if (stateCheckResponsesRef.current) {
+            stateCheckResponsesRef.current.push(checkRes);
+          }
+          console.log(
+            "[GamePlayView] Received state_check_response from:",
+            checkRes.playerName,
+            "hash:",
+            checkRes.clientStateHash
+          );
+          break;
+        }
+
+        case "force_sync": {
+          // Host is forcing us to sync state
+          const forceSyncMsg =
+            message as import("@/src/domain/types/peer").ForceSyncMessage;
+          console.log("[GamePlayView] Force sync received from host");
+
+          // Apply the state from host (similar to sync_game_state)
+          useGameStore.setState((state) => {
+            const restoredPlayers = forceSyncMsg.allPlayers.map((p, idx) => ({
+              id: p.id,
+              name: p.name,
+              avatar: p.avatar,
+              isAI: p.isAI ?? false,
+              hand:
+                p.id === myPlayerId
+                  ? forceSyncMsg.hand
+                  : Array.from({ length: p.handCount }, (_, i) => ({
+                      id: `dummy-${p.id}-${i}`,
+                      suit: "spade" as const,
+                      rank: "A" as const,
+                      value: 14,
+                      suitValue: 4,
+                    })),
+              hasPassed: p.hasPassed,
+              isCurrentTurn: p.isCurrentTurn,
+              finishOrder: p.finishOrder ?? null,
+              score: state.players[idx]?.score ?? 0,
+              roundScore: state.players[idx]?.roundScore ?? 0,
+              rank: state.players[idx]?.rank ?? null,
+            }));
+
+            return {
+              phase: forceSyncMsg.gameState.phase as
+                | "waiting"
+                | "dealing"
+                | "playing"
+                | "round_end"
+                | "game_end",
+              currentPlayerIndex: forceSyncMsg.gameState.currentPlayerIndex,
+              roundNumber: forceSyncMsg.gameState.roundNumber,
+              finishOrder: forceSyncMsg.gameState.finishOrder,
+              lastPlayerId: forceSyncMsg.gameState.lastPlayerId,
+              passCount: forceSyncMsg.gameState.passCount,
+              isFirstTurn: forceSyncMsg.gameState.isFirstTurn,
+              currentHand: forceSyncMsg.gameState.currentHand,
+              discardPile: forceSyncMsg.discardPile,
+              players: restoredPlayers,
+              turnDeadline: forceSyncMsg.gameState.turnDeadline,
+            };
+          });
+
+          addToast("info", "🔄 Host บังคับ Sync State แล้ว");
+          console.log("[GamePlayView] Force sync applied");
           break;
         }
 
@@ -2055,6 +2203,158 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
     }
   };
 
+  // Host: Trigger state verification with all clients
+  const triggerStateCheck = useCallback(() => {
+    if (!isHost || !gameStarted || phase !== "playing") return;
+
+    setIsCheckingState(true);
+    stateCheckResponsesRef.current = [];
+
+    const gameState = useGameStore.getState();
+    const localPlayer = gameState.players.find((p) => p.id === myPlayerId);
+
+    // Create host state hash
+    const hostStateHash = `${gameState.currentPlayerIndex}-${
+      gameState.roundNumber
+    }-${gameState.passCount}-${localPlayer?.hand.length ?? 0}-${
+      gameState.isFirstTurn
+    }`;
+
+    const checkId = `check-${Date.now()}`;
+
+    // Send state check request to all clients
+    const checkMsg = {
+      type: "state_check_request" as const,
+      senderId: peerId!,
+      timestamp: Date.now(),
+      checkId,
+      hostStateHash,
+    };
+
+    // Count expected responses (non-AI, non-host players)
+    const expectedResponses = players.filter(
+      (p) => p.peerId !== peerId && !p.peerId.startsWith("ai-peer-")
+    ).length;
+
+    console.log(
+      "[GamePlayView] Sending state_check_request to",
+      expectedResponses,
+      "clients, hostHash:",
+      hostStateHash
+    );
+
+    connections.forEach((conn, connPeerId) => {
+      if (!connPeerId.startsWith("ai-peer-") && conn.open) {
+        conn.send(checkMsg);
+      }
+    });
+
+    addToast("info", `🔍 ตรวจสอบ State กับ ${expectedResponses} clients...`);
+
+    // Wait for responses and process them
+    setTimeout(() => {
+      const responses = stateCheckResponsesRef.current;
+      const hostState = useGameStore.getState();
+      const hostPlayer = hostState.players.find((p) => p.id === myPlayerId);
+      const currentHostHash = `${hostState.currentPlayerIndex}-${
+        hostState.roundNumber
+      }-${hostState.passCount}-${hostPlayer?.hand.length ?? 0}-${
+        hostState.isFirstTurn
+      }`;
+
+      let mismatchCount = 0;
+      const mismatchedPlayers: string[] = [];
+
+      responses.forEach((res) => {
+        if (res.clientStateHash !== currentHostHash) {
+          mismatchCount++;
+          mismatchedPlayers.push(res.playerName);
+
+          // Force sync this client
+          const clientPlayer = hostState.players.find(
+            (p) => p.id === res.playerId
+          );
+          if (clientPlayer) {
+            const forceSyncMsg: import("@/src/domain/types/peer").ForceSyncMessage =
+              {
+                type: "force_sync",
+                senderId: peerId!,
+                timestamp: Date.now(),
+                hand: clientPlayer.hand,
+                gameState: {
+                  phase: hostState.phase,
+                  currentPlayerIndex: hostState.currentPlayerIndex,
+                  roundNumber: hostState.roundNumber,
+                  finishOrder: hostState.finishOrder,
+                  lastPlayerId: hostState.lastPlayerId,
+                  passCount: hostState.passCount,
+                  isFirstTurn: hostState.isFirstTurn,
+                  currentHand: hostState.currentHand,
+                  turnDeadline: hostState.turnDeadline,
+                },
+                discardPile: hostState.discardPile,
+                allPlayers: hostState.players.map((p) => ({
+                  id: p.id,
+                  name: p.name,
+                  avatar: p.avatar,
+                  handCount: p.hand.length,
+                  hasPassed: p.hasPassed,
+                  isCurrentTurn: p.isCurrentTurn,
+                  finishOrder: p.finishOrder ?? undefined,
+                  isAI: p.isAI ?? false,
+                })),
+              };
+
+            // Find connection for this player
+            const playerPeer = players.find((p) => p.id === res.playerId);
+            if (playerPeer) {
+              const conn = connections.get(playerPeer.peerId);
+              if (conn?.open) {
+                conn.send(forceSyncMsg);
+                console.log(
+                  "[GamePlayView] Force sync sent to:",
+                  res.playerName
+                );
+              }
+            }
+          }
+        }
+      });
+
+      if (mismatchCount > 0) {
+        addToast(
+          "warning",
+          `⚠️ พบ ${mismatchCount} client ไม่ตรงกัน: ${mismatchedPlayers.join(
+            ", "
+          )} - บังคับ Sync แล้ว`
+        );
+      } else if (responses.length === expectedResponses) {
+        addToast(
+          "success",
+          `✅ State ตรงกันทั้งหมด (${responses.length} clients)`
+        );
+      } else {
+        addToast(
+          "info",
+          `📊 ได้รับ ${responses.length}/${expectedResponses} responses - ${
+            responses.length === 0 ? "รอ..." : "บางส่วนไม่ตอบ"
+          }`
+        );
+      }
+
+      setIsCheckingState(false);
+    }, 3000); // Wait 3 seconds for responses
+  }, [
+    isHost,
+    gameStarted,
+    phase,
+    myPlayerId,
+    peerId,
+    players,
+    connections,
+    addToast,
+  ]);
+
   // Check if can play selected cards
   const canPlaySelected =
     myPlayerId &&
@@ -2221,6 +2521,32 @@ export function GamePlayView({ roomCode }: GamePlayViewProps) {
                 </select>
                 {/* Connection status indicator with inline sync */}
                 <div className="flex items-center gap-1">
+                  {/* Host: State Check Button */}
+                  {isHost && (
+                    <button
+                      onClick={triggerStateCheck}
+                      disabled={isCheckingState}
+                      className={cn(
+                        "p-1 rounded transition-colors",
+                        isCheckingState
+                          ? "text-gray-500"
+                          : "text-yellow-400 hover:bg-yellow-800"
+                      )}
+                      title={
+                        isCheckingState
+                          ? "กำลังตรวจสอบ..."
+                          : "🔍 ตรวจสอบ State กับ Clients ทั้งหมด"
+                      }
+                    >
+                      <RefreshCw
+                        className={cn(
+                          "w-4 h-4",
+                          isCheckingState && "animate-spin"
+                        )}
+                      />
+                    </button>
+                  )}
+                  {/* Client: Sync Button */}
                   {!isHost && (
                     <button
                       onClick={requestSync}

@@ -720,7 +720,8 @@ export const usePeerStore = create<PeerStore>((set, get) => ({
         break;
       }
 
-      // Game messages - forward to game handler and relay if host
+      // Game messages - forward to game handler
+      // NOTE: play_cards and pass_turn relay is handled by GamePlayView to include nextPlayerIndex
       case "deal_cards":
       case "play_cards":
       case "pass_turn":
@@ -730,26 +731,13 @@ export const usePeerStore = create<PeerStore>((set, get) => ({
       case "new_round":
       case "resume_game":
       case "sync_game_state": {
-        const { onGameMessage, room, connections } = get();
+        const { onGameMessage } = get();
 
-        // Forward to local game handler
+        // Forward to local game handler (relay is handled there for play_cards/pass_turn)
         if (onGameMessage) {
           onGameMessage(message);
         } else {
           console.log("[PeerJS] No game message handler for:", message.type);
-        }
-
-        // If host, relay to all OTHER clients (not back to sender)
-        if (
-          room?.isHost &&
-          (message.type === "play_cards" || message.type === "pass_turn")
-        ) {
-          connections.forEach((conn, connPeerId) => {
-            // Don't send back to the sender
-            if (connPeerId !== fromPeerId && conn.open) {
-              conn.send(message);
-            }
-          });
         }
         break;
       }
@@ -839,6 +827,33 @@ export const usePeerStore = create<PeerStore>((set, get) => ({
 
       // Auto action (host triggers auto-action when timer expires)
       case "auto_action": {
+        const { onGameMessage } = get();
+        if (onGameMessage) {
+          onGameMessage(message);
+        }
+        break;
+      }
+
+      // State check request (host asks clients for state hash)
+      case "state_check_request": {
+        const { onGameMessage } = get();
+        if (onGameMessage) {
+          onGameMessage(message);
+        }
+        break;
+      }
+
+      // State check response (client sends state hash to host)
+      case "state_check_response": {
+        const { onGameMessage } = get();
+        if (onGameMessage) {
+          onGameMessage(message);
+        }
+        break;
+      }
+
+      // Force sync (host forces client to sync state)
+      case "force_sync": {
         const { onGameMessage } = get();
         if (onGameMessage) {
           onGameMessage(message);

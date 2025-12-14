@@ -192,7 +192,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
   // Play cards
   playCards: (playerId, cards) => {
     const state = get();
-    const { players, currentPlayerIndex, currentHand, isFirstTurn } = state;
+    const {
+      players,
+      currentPlayerIndex,
+      currentHand,
+      isFirstTurn,
+      discardPile,
+    } = state;
 
     // Validate
     if (!get().canPlayCards(playerId, cards)) {
@@ -211,6 +217,29 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     // First turn must include 3♣
     if (isFirstTurn && !containsThreeOfClubs(cards)) return false;
+
+    // Deduplication: Check if these exact cards are already in discard pile
+    const cardIds = cards
+      .map((c) => c.id)
+      .sort()
+      .join(",");
+    const isDuplicate = discardPile.some((ph) => {
+      const existingCardIds = ph.cards
+        .map((c) => c.id)
+        .sort()
+        .join(",");
+      return ph.playerId === playerId && existingCardIds === cardIds;
+    });
+
+    if (isDuplicate) {
+      console.log(
+        "[GameStore] Skipping duplicate playCards for:",
+        playerId,
+        "cards:",
+        cardIds
+      );
+      return false;
+    }
 
     // Remove cards from player's hand
     const player = players[playerIndex];
@@ -239,7 +268,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       lastPlayerId: playerId,
       passCount: 0,
       isFirstTurn: false,
-      discardPile: [...state.discardPile, playedHand],
+      discardPile: [...discardPile, playedHand],
       finishOrder: playerFinished
         ? [...state.finishOrder, playerId]
         : state.finishOrder,
@@ -298,10 +327,38 @@ export const useGameStore = create<GameStore>((set, get) => ({
   // Apply remote play (no validation - for syncing from other players)
   applyRemotePlay: (playerId, cards, playedHand, nextPlayerIndex) => {
     const state = get();
-    const { players } = state;
+    const { players, discardPile } = state;
 
     const playerIndex = players.findIndex((p) => p.id === playerId);
     if (playerIndex === -1) return;
+
+    // Deduplication: Check if this exact play is already in discard pile
+    // Compare by playerId + card IDs to detect duplicate processing
+    const cardIds = playedHand.cards
+      .map((c) => c.id)
+      .sort()
+      .join(",");
+    const isDuplicate = discardPile.some((ph) => {
+      const existingCardIds = ph.cards
+        .map((c) => c.id)
+        .sort()
+        .join(",");
+      return ph.playerId === playedHand.playerId && existingCardIds === cardIds;
+    });
+
+    if (isDuplicate) {
+      console.log(
+        "[GameStore] Skipping duplicate applyRemotePlay for:",
+        playerId,
+        "cards:",
+        cardIds
+      );
+      // Still update currentPlayerIndex if provided
+      if (nextPlayerIndex !== undefined) {
+        set({ currentPlayerIndex: nextPlayerIndex });
+      }
+      return;
+    }
 
     // Reduce card count for the player (remove cards.length dummy cards)
     const player = players[playerIndex];
@@ -334,7 +391,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       lastPlayerId: playerId,
       passCount: 0,
       isFirstTurn: false,
-      discardPile: [...state.discardPile, playedHand],
+      discardPile: [...discardPile, playedHand],
       finishOrder: playerFinished
         ? [...state.finishOrder, playerId]
         : state.finishOrder,
