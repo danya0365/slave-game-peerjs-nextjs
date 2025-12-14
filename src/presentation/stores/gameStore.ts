@@ -373,12 +373,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
     // Otherwise fall back to calculating locally
     const useHostIndex = nextPlayerIndex !== undefined;
 
-    // Update all players
+    // Update players - only reset hasPassed for the player who played
+    // Other players keep their hasPassed state (they can't play until round ends)
     const updatedPlayers = players.map((p, index) => ({
       ...p,
       hand: index === playerIndex ? remainingCards : p.hand,
       isCurrentTurn: useHostIndex ? index === nextPlayerIndex : false,
-      hasPassed: false,
+      hasPassed: index === playerIndex ? false : p.hasPassed, // Keep others' pass state!
       finishOrder:
         index === playerIndex && playerFinished
           ? finishedPlayers + 1
